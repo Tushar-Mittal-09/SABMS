@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 const { StatusCodes } = require('http-status-codes');
 
 const config = require('./config/env.config');
+const { getDbState } = require('./config/database');
 const requestId = require('./middleware/requestId.middleware');
 
 const app = express();
@@ -65,12 +66,18 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 9. Base System Health Check Endpoint
 app.get('/health', (req, res) => {
-  res.status(StatusCodes.OK).json({
-    status: 'success',
+  const dbHealth = getDbState();
+  const httpStatus = dbHealth.isConnected
+    ? StatusCodes.OK
+    : StatusCodes.SERVICE_UNAVAILABLE;
+
+  res.status(httpStatus).json({
+    status: dbHealth.isConnected ? 'success' : 'degraded',
     appName: config.appName,
     environment: config.env,
     apiVersion: config.apiBaseUrl,
     requestId: req.id,
+    database: dbHealth,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });

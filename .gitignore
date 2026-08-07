@@ -53,6 +53,10 @@ lerna-debug.log*
 ehthumbs.db
 Thumbs.db
 
+# Storage & Uploads
+uploads/
+*.upload
+
 # Cache & Temporary files
 .cache/
 .parcel-cache/

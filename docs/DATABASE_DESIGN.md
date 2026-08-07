@@ -1,4 +1,5 @@
 # Database Design Specification
+
 ## Smart Auditorium Booking & Management System (SABMS)
 
 ---
@@ -14,18 +15,19 @@
 
 ## 2. Collection Indexing Strategy
 
-| Collection | Target Fields | Index Type | Business Justification |
-| :--- | :--- | :--- | :--- |
-| `users` | `email` | Unique | Fast authentication lookup & identity integrity. |
+| Collection | Target Fields                                   | Index Type     | Business Justification                                                |
+| :--------- | :---------------------------------------------- | :------------- | :-------------------------------------------------------------------- |
+| `users`    | `email`                                         | Unique         | Fast authentication lookup & identity integrity.                      |
 | `bookings` | `{ auditoriumId: 1, startTime: 1, endTime: 1 }` | Compound Index | Prevents time-slot overlapping and accelerates availability searches. |
-| `bookings` | `status` | Single Field | Optimizes dashboard filtering (Pending, Approved, Rejected). |
-| `events` | `{ isPublic: 1, date: 1 }` | Compound Index | Fast queries for upcoming public events calendar. |
+| `bookings` | `status`                                        | Single Field   | Optimizes dashboard filtering (Pending, Approved, Rejected).          |
+| `events`   | `{ isPublic: 1, date: 1 }`                      | Compound Index | Fast queries for upcoming public events calendar.                     |
 
 ---
 
 ## 3. Detailed Collection Schemas
 
 ### 3.1 `users` Collection Schema Placeholder
+
 ```javascript
 {
   _id: ObjectId,
@@ -40,6 +42,7 @@
 ```
 
 ### 3.2 `bookings` Collection Schema Placeholder
+
 ```javascript
 {
   _id: ObjectId,

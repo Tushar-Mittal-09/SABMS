@@ -1,4 +1,5 @@
 # Product Requirements Document (PRD)
+
 ## Smart Auditorium Booking & Management System (SABMS)
 
 ---
@@ -20,31 +21,36 @@ The **Smart Auditorium Booking & Management System (SABMS)** is an enterprise-gr
 
 ## 3. Key Target Personas
 
-| Persona | Role | Key Needs |
-| :--- | :--- | :--- |
-| **Event Organizer** | Student / Faculty / External Client | Search venues, request slots, request equipment, track approval status. |
-| **Auditorium Manager** | Venue Administrator | Review booking requests, approve/reject events, manage maintenance schedules. |
-| **Department Head / Admin**| Approver / System Admin | Oversee institution-wide venue usage, manage user roles, audit reports. |
+| Persona                     | Role                                | Key Needs                                                                     |
+| :-------------------------- | :---------------------------------- | :---------------------------------------------------------------------------- |
+| **Event Organizer**         | Student / Faculty / External Client | Search venues, request slots, request equipment, track approval status.       |
+| **Auditorium Manager**      | Venue Administrator                 | Review booking requests, approve/reject events, manage maintenance schedules. |
+| **Department Head / Admin** | Approver / System Admin             | Oversee institution-wide venue usage, manage user roles, audit reports.       |
 
 ---
 
 ## 4. Functional Requirements Matrix (Module Breakdown)
 
-> *Note: Detailed specifications will be expanded module by module in subsequent steps.*
+> _Note: Detailed specifications will be expanded module by module in subsequent steps._
 
 ### 4.1 Authentication & User Management (`auth`)
+
 - User Registration, Login, JWT Token authentication, Role-Based Access Control (RBAC).
 
 ### 4.2 Auditorium & Resource Management (`auditorium`)
+
 - Auditorium CRUD, capacity, AV equipment inventory, maintenance mode toggles.
 
 ### 4.3 Reservation & Booking Engine (`booking`)
+
 - Slot search, booking request submission, conflict detection, approval workflow, cancellation.
 
 ### 4.4 Event Scheduling & Calendar (`event`)
+
 - Public event directory, featured events, interactive calendar view, attendee ticketing/RSVP.
 
 ### 4.5 Real-Time Notifications & Alerts (`notification`)
+
 - Email notifications, WebSockets live status alerts, system audit logs.
 
 ---
@@ -60,6 +66,6 @@ The **Smart Auditorium Booking & Management System (SABMS)** is an enterprise-gr
 
 ## 6. Document Revision & Expansion History
 
-| Version | Date | Author | Description |
-| :--- | :--- | :--- | :--- |
+| Version  | Date       | Author                    | Description                         |
+| :------- | :--------- | :------------------------ | :---------------------------------- |
 | `v1.0.0` | 2026-08-08 | Senior Software Architect | Initial PRD Template Initialization |

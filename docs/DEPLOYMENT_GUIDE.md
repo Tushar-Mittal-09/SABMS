@@ -1,4 +1,5 @@
 # Deployment & DevOps Guide
+
 ## Smart Auditorium Booking & Management System (SABMS)
 
 ---
@@ -24,6 +25,7 @@ Both client and server workspaces are containerized using multi-stage Dockerfile
 ## 3. Continuous Integration & Deployment (CI/CD)
 
 GitHub Actions pipelines defined under `.github/workflows/`:
+
 1. **`ci.yml`**: Triggers on PR to `main` — runs `lint`, `format:check`, `npm test`, and Vite build.
 2. **`cd.yml`**: Triggers on push to `main` — builds Docker images and triggers cloud deployment.
 

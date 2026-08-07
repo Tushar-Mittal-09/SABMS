@@ -1,4 +1,5 @@
 # Entity-Relationship Diagram (ERD)
+
 ## Smart Auditorium Booking & Management System (SABMS)
 
 ---

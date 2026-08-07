@@ -6,7 +6,7 @@
 
 ## 🏛️ Project Overview
 
-**SABMS** is designed to streamline reservation workflows, scheduling, seat allocation, equipment request management, and real-time status tracking for institutional and commercial auditoriums. 
+**SABMS** is designed to streamline reservation workflows, scheduling, seat allocation, equipment request management, and real-time status tracking for institutional and commercial auditoriums.
 
 The system adopts a **Modular Monolith Architecture** to maintain domain encapsulation and clear boundaries while minimizing operational overhead during initial deployment stages. Each core domain (e.g., Auth, Auditorium, Booking, Event, Notification) is structured as an isolated module ready to be extracted into microservices if high scalability demands arise in the future.
 
@@ -33,13 +33,13 @@ SABMS/
 
 ## 📂 Directory Taxonomy & Purpose
 
-| Directory | Purpose | Enterprise Role |
-| :--- | :--- | :--- |
-| **`client/`** | Web Client Application | Houses the user interface, page routes, state management, components, and static assets. |
-| **`server/`** | Core Application Server | Houses HTTP server, REST APIs, domain services, database schemas, and business logic organized in bounded modules. |
-| **`docs/`** | System Documentation | Architectural Decision Records (ADRs), ER diagrams, API schemas, and deployment guides. |
-| **`scripts/`** | Utility & Tooling Scripts | Database seeds, migrations, environment setup scripts, and administrative CLI tools. |
-| **`.github/`** | Repository Governance | Automation workflows, pull request templates, issue templates, and CI/CD pipelines. |
+| Directory      | Purpose                   | Enterprise Role                                                                                                    |
+| :------------- | :------------------------ | :----------------------------------------------------------------------------------------------------------------- |
+| **`client/`**  | Web Client Application    | Houses the user interface, page routes, state management, components, and static assets.                           |
+| **`server/`**  | Core Application Server   | Houses HTTP server, REST APIs, domain services, database schemas, and business logic organized in bounded modules. |
+| **`docs/`**    | System Documentation      | Architectural Decision Records (ADRs), ER diagrams, API schemas, and deployment guides.                            |
+| **`scripts/`** | Utility & Tooling Scripts | Database seeds, migrations, environment setup scripts, and administrative CLI tools.                               |
+| **`.github/`** | Repository Governance     | Automation workflows, pull request templates, issue templates, and CI/CD pipelines.                                |
 
 ---
 

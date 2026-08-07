@@ -1,0 +1,19 @@
+# Build & Dist
+node_modules/
+dist/
+build/
+out/
+.next/
+package-lock.json
+pnpm-lock.yaml
+
+# Storage & Logs
+logs/
+uploads/
+coverage/
+.nyc_output/
+
+# IDE & Config
+.git/
+.vscode/
+.idea/

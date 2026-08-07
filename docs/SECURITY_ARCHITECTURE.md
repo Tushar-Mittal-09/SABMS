@@ -1,4 +1,5 @@
 # Security Architecture Specification
+
 ## Smart Auditorium Booking & Management System (SABMS)
 
 ---
@@ -19,13 +20,13 @@ SABMS adheres to the **Zero Trust** security posture across all network layers a
 
 ## 3. Threat Mitigation Strategy (OWASP Top 10)
 
-| Threat | Prevention Strategy | Implementation |
-| :--- | :--- | :--- |
-| **SQL / NoSQL Injection** | Mongoose schema sanitization | Automatic stripping of `$` operators from user inputs. |
-| **Cross-Site Scripting (XSS)** | React JSX auto-escaping + Helmet | Content-Security-Policy (CSP) headers via `helmet()`. |
-| **Cross-Site Request Forgery (CSRF)** | SameSite cookie attributes | `SameSite=Strict` HTTP-only refresh cookies. |
-| **Broken Access Control** | Express authorization middleware | Granular role-checking middleware on protected routes. |
-| **Rate Limiting / DoS** | IP-based request throttling | Express rate limiter (`express-rate-limit`). |
+| Threat                                | Prevention Strategy              | Implementation                                         |
+| :------------------------------------ | :------------------------------- | :----------------------------------------------------- |
+| **SQL / NoSQL Injection**             | Mongoose schema sanitization     | Automatic stripping of `$` operators from user inputs. |
+| **Cross-Site Scripting (XSS)**        | React JSX auto-escaping + Helmet | Content-Security-Policy (CSP) headers via `helmet()`.  |
+| **Cross-Site Request Forgery (CSRF)** | SameSite cookie attributes       | `SameSite=Strict` HTTP-only refresh cookies.           |
+| **Broken Access Control**             | Express authorization middleware | Granular role-checking middleware on protected routes. |
+| **Rate Limiting / DoS**               | IP-based request throttling      | Express rate limiter (`express-rate-limit`).           |
 
 ---
 

@@ -1,4 +1,5 @@
 # Low-Level Design (LLD)
+
 ## Smart Auditorium Booking & Management System (SABMS)
 
 ---

@@ -1,15 +1,13 @@
-require('dotenv').config();
 const http = require('http');
+const config = require('./config/env.config');
 const app = require('./app');
-
-const PORT = process.env.PORT || 5000;
 
 const server = http.createServer(app);
 
 const startServer = () => {
-  server.listen(PORT, () => {
+  server.listen(config.port, () => {
     console.log(
-      `[SABMS Server] Operational on port ${PORT} (${process.env.NODE_ENV || 'development'} mode)`
+      `[${config.appName}] Operational on port ${config.port} (${config.env} mode)`
     );
   });
 };

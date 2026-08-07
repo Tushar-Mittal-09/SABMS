@@ -3,13 +3,14 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { StatusCodes } = require('http-status-codes');
+const config = require('./config/env.config');
 
 const app = express();
 
 // Security & Utility Middleware
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(cors({ origin: config.clientUrl || '*' }));
+app.use(morgan(config.isProduction ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -17,7 +18,9 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/health', (req, res) => {
   res.status(StatusCodes.OK).json({
     status: 'success',
-    message: 'SABMS Backend Service is operational',
+    appName: config.appName,
+    environment: config.env,
+    apiVersion: config.apiBaseUrl,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
@@ -37,7 +40,7 @@ app.use((err, req, res, next) => {
   res.status(statusCode).json({
     status: 'error',
     message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    ...(config.isDevelopment && { stack: err.stack }),
   });
 });
 

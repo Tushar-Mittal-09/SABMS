@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const config = require('./env.config');
+const logger = require('../utils/logger');
 
 /**
  * Production-ready Mongoose Connection Options
@@ -23,21 +24,28 @@ const setupConnectionEvents = () => {
   const db = mongoose.connection;
 
   db.on('connected', () => {
-    console.log(
-      `[Database] Mongoose connected to MongoDB cluster at ${db.host}:${db.port}/${db.name}`
+    logger.info(
+      `Mongoose connected to MongoDB cluster at ${db.host}:${db.port}/${db.name}`,
+      { context: 'Database' }
     );
   });
 
   db.on('error', (err) => {
-    console.error(`[Database] Mongoose connection error: ${err.message}`);
+    logger.error(`Mongoose connection error: ${err.message}`, {
+      context: 'Database',
+    });
   });
 
   db.on('disconnected', () => {
-    console.warn('[Database] Mongoose connection disconnected.');
+    logger.warn('Mongoose connection disconnected.', {
+      context: 'Database',
+    });
   });
 
   db.on('reconnected', () => {
-    console.log('[Database] Mongoose successfully reconnected to MongoDB.');
+    logger.info('Mongoose successfully reconnected to MongoDB.', {
+      context: 'Database',
+    });
   });
 };
 
@@ -51,19 +59,23 @@ const connectDatabase = async (retryCount = 0) => {
   try {
     await mongoose.connect(config.db.uri, mongooseOptions);
   } catch (error) {
-    console.error(
-      `[Database] Connection attempt ${retryCount + 1} failed: ${error.message}`
+    logger.error(
+      `Connection attempt ${retryCount + 1} failed: ${error.message}`,
+      { context: 'Database' }
     );
 
     if (retryCount < MAX_RETRIES) {
       const delay = RETRY_INTERVAL_MS * Math.pow(2, retryCount);
-      console.log(`[Database] Retrying connection in ${delay / 1000}s...`);
+      logger.info(`Retrying connection in ${delay / 1000}s...`, {
+        context: 'Database',
+      });
       await new Promise((resolve) => setTimeout(resolve, delay));
       return connectDatabase(retryCount + 1);
     }
 
-    console.error(
-      `[Database] Failed to connect to MongoDB after ${MAX_RETRIES} attempts.`
+    logger.error(
+      `Failed to connect to MongoDB after ${MAX_RETRIES} attempts.`,
+      { context: 'Database' }
     );
     throw error;
   }
@@ -75,11 +87,13 @@ const connectDatabase = async (retryCount = 0) => {
 const disconnectDatabase = async () => {
   try {
     await mongoose.connection.close();
-    console.log('[Database] Mongoose connection closed gracefully.');
+    logger.info('Mongoose connection closed gracefully.', {
+      context: 'Database',
+    });
   } catch (error) {
-    console.error(
-      `[Database] Error closing Mongoose connection: ${error.message}`
-    );
+    logger.error(`Error closing Mongoose connection: ${error.message}`, {
+      context: 'Database',
+    });
   }
 };
 

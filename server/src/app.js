@@ -6,6 +6,8 @@ const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { StatusCodes } = require('http-status-codes');
 
+const logger = require('./utils/logger');
+
 const config = require('./config/env.config');
 const { getDbState } = require('./config/database');
 const requestId = require('./middleware/requestId.middleware');
@@ -46,13 +48,13 @@ app.use(
   })
 );
 
-// 5. HTTP Request Logging (Morgan with Correlation ID token)
+// 5. HTTP Request Logging (Morgan → Winston stream with Correlation ID token)
 morgan.token('req-id', (req) => req.id || 'N/A');
 const morganFormat = config.isProduction
   ? ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" - [reqId: :req-id] - :response-time ms'
   : ':method :url :status :response-time ms - reqId: :req-id';
 
-app.use(morgan(morganFormat));
+app.use(morgan(morganFormat, { stream: logger.stream }));
 
 // 6. Response Compression (gzip/brotli)
 app.use(compression());

@@ -7,10 +7,12 @@ const cookieParser = require('cookie-parser');
 const { StatusCodes } = require('http-status-codes');
 
 const logger = require('./utils/logger');
+const AppError = require('./utils/AppError');
 
 const config = require('./config/env.config');
 const { getDbState } = require('./config/database');
 const requestId = require('./middleware/requestId.middleware');
+const errorHandler = require('./middleware/errorHandler.middleware');
 
 const app = express();
 
@@ -86,23 +88,15 @@ app.get('/health', (req, res) => {
 });
 
 // 10. Resource Not Found (404) Fallback Handler
-app.use((req, res) => {
-  res.status(StatusCodes.NOT_FOUND).json({
-    status: 'fail',
-    message: `Cannot find ${req.method} ${req.originalUrl} on this server`,
-    requestId: req.id,
-  });
+app.use((req, res, next) => {
+  next(
+    AppError.notFound(
+      `Cannot find ${req.method} ${req.originalUrl} on this server`
+    )
+  );
 });
 
-// 11. Global Error Handler Placeholder
-app.use((err, req, res, next) => {
-  const statusCode = err.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
-  res.status(statusCode).json({
-    status: 'error',
-    message: err.message || 'Internal Server Error',
-    requestId: req.id,
-    ...(config.isDevelopment && { stack: err.stack }),
-  });
-});
+// 11. Global Error Handler
+app.use(errorHandler);
 
 module.exports = app;

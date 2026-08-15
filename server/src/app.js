@@ -1,56 +1,21 @@
 const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
 const morgan = require('morgan');
-const compression = require('compression');
-const cookieParser = require('cookie-parser');
-const { StatusCodes } = require('http-status-codes');
 
 const logger = require('./utils/logger');
-const AppError = require('./utils/AppError');
-
 const config = require('./config/env.config');
-const { getDbState } = require('./config/database');
-const requestId = require('./middleware/requestId.middleware');
 const errorHandler = require('./middleware/errorHandler.middleware');
+const responseHandler = require('./middleware/responseHandler.middleware');
+const { applySecurityMiddleware } = require('./middleware/security.middleware');
+const { mountAllRoutes, listRoutes } = require('./routes');
 
 const app = express();
 
-// 1. Trust Proxy Configuration for Reverse Proxies (NGINX/Cloudflare)
 app.set('trust proxy', config.isProduction ? 1 : false);
 
-// 2. Request Correlation ID Middleware
-app.use(requestId);
+app.use(responseHandler);
 
-// 3. HTTP Security Headers (Helmet)
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-        imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
-        connectSrc: ["'self'", config.clientUrl],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-  })
-);
+applySecurityMiddleware(app);
 
-// 4. Cross-Origin Resource Sharing (CORS)
-app.use(
-  cors({
-    origin: config.clientUrl || '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
-    exposedHeaders: ['X-Request-ID'],
-  })
-);
-
-// 5. HTTP Request Logging (Morgan → Winston stream with Correlation ID token)
 morgan.token('req-id', (req) => req.id || 'N/A');
 const morganFormat = config.isProduction
   ? ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" - [reqId: :req-id] - :response-time ms'
@@ -58,45 +23,16 @@ const morganFormat = config.isProduction
 
 app.use(morgan(morganFormat, { stream: logger.stream }));
 
-// 6. Response Compression (gzip/brotli)
-app.use(compression());
+const mountInfo = mountAllRoutes(app);
 
-// 7. Cookie Parser
-app.use(cookieParser());
-
-// 8. Body Parsers (JSON & URL-encoded with payload limits)
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// 9. Base System Health Check Endpoint
-app.get('/health', (req, res) => {
-  const dbHealth = getDbState();
-  const httpStatus = dbHealth.isConnected
-    ? StatusCodes.OK
-    : StatusCodes.SERVICE_UNAVAILABLE;
-
-  res.status(httpStatus).json({
-    status: dbHealth.isConnected ? 'success' : 'degraded',
-    appName: config.appName,
-    environment: config.env,
-    apiVersion: config.apiBaseUrl,
-    requestId: req.id,
-    database: dbHealth,
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+if (config.isDevelopment) {
+  const totalRoutes = listRoutes(app).length;
+  logger.info('Route registration complete', {
+    totalEndpoints: totalRoutes,
+    apiPrefix: mountInfo.apiPrefix,
   });
-});
+}
 
-// 10. Resource Not Found (404) Fallback Handler
-app.use((req, res, next) => {
-  next(
-    AppError.notFound(
-      `Cannot find ${req.method} ${req.originalUrl} on this server`
-    )
-  );
-});
-
-// 11. Global Error Handler
 app.use(errorHandler);
 
 module.exports = app;

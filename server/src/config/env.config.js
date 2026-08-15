@@ -44,6 +44,14 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+
+  // Security Configuration
+  COOKIE_SECRET: z
+    .string()
+    .default('sabms-enterprise-secure-cookie-secret-key-2026'),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(100),
+  PAYLOAD_SIZE_LIMIT: z.string().default('10mb'),
 });
 
 /**
@@ -73,14 +81,17 @@ const parseEnv = () => {
 
 const parsedEnv = parseEnv();
 
+const isTestEnv =
+  parsedEnv.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+
 /**
  * Centralized, immutable configuration object
  */
 const config = Object.freeze({
-  env: parsedEnv.NODE_ENV,
-  isDevelopment: parsedEnv.NODE_ENV === 'development',
-  isTest: parsedEnv.NODE_ENV === 'test',
-  isProduction: parsedEnv.NODE_ENV === 'production',
+  env: isTestEnv ? 'test' : parsedEnv.NODE_ENV,
+  isDevelopment: parsedEnv.NODE_ENV === 'development' && !isTestEnv,
+  isTest: isTestEnv,
+  isProduction: parsedEnv.NODE_ENV === 'production' && !isTestEnv,
   port: parsedEnv.PORT,
   appName: parsedEnv.APP_NAME,
   apiPrefix: parsedEnv.API_PREFIX,
@@ -108,6 +119,12 @@ const config = Object.freeze({
     apiKey: parsedEnv.CLOUDINARY_API_KEY,
     apiSecret: parsedEnv.CLOUDINARY_API_SECRET,
   }),
+  cookieSecret: parsedEnv.COOKIE_SECRET,
+  rateLimit: Object.freeze({
+    windowMs: parsedEnv.RATE_LIMIT_WINDOW_MS,
+    max: parsedEnv.RATE_LIMIT_MAX_REQUESTS,
+  }),
+  payloadSizeLimit: parsedEnv.PAYLOAD_SIZE_LIMIT,
 });
 
 module.exports = config;

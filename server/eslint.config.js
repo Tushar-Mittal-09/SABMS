@@ -1,0 +1,67 @@
+const js = require('@eslint/js');
+
+module.exports = [
+  js.configs.recommended,
+  {
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: {
+        process: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        module: 'readonly',
+        require: 'readonly',
+        exports: 'writable',
+        console: 'readonly',
+        describe: 'readonly',
+        test: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        jest: 'readonly',
+        Set: 'readonly',
+        Map: 'readonly',
+        Promise: 'readonly',
+        Date: 'readonly',
+        Math: 'readonly',
+        JSON: 'readonly',
+        Error: 'readonly',
+        TypeError: 'readonly',
+        Array: 'readonly',
+        Object: 'readonly',
+        String: 'readonly',
+        Number: 'readonly',
+        Boolean: 'readonly',
+        RegExp: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+      },
+    },
+    rules: {
+      'no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^(req|res|next|_)',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      'no-console': 'off',
+    },
+  },
+  {
+    ignores: [
+      'node_modules/**',
+      'logs/**',
+      'coverage/**',
+      'dist/**',
+      'uploads/**',
+    ],
+  },
+];

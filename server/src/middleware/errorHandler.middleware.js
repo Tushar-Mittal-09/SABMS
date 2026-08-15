@@ -1,9 +1,21 @@
 const { StatusCodes } = require('http-status-codes');
+const { ZodError } = require('zod');
 const config = require('../config/env.config');
 const logger = require('../utils/logger');
 const AppError = require('../utils/AppError');
+const { formatZodError } = require('../validations/validationFormatter');
 
-// ─── Mongoose / JWT Error Normalizers ───────────────────────────────────────
+// ─── Mongoose / JWT / Zod Error Normalizers ─────────────────────────────────
+
+/**
+ * Handle ZodError (request/response validation failures).
+ * Converts Zod's structured issue array into AppError.validationError
+ * with field-level granularity matching the project's error shape.
+ */
+const handleZodError = (err) => {
+  const appError = formatZodError(err);
+  return appError;
+};
 
 /**
  * Handle Mongoose CastError (invalid ObjectId, type mismatch).
@@ -60,36 +72,40 @@ const handleJWTExpiredError = () => {
  * Exposes full error details including stack trace for debugging.
  */
 const sendDevError = (err, req, res) => {
-  res.status(err.statusCode).json({
-    status: err.status,
-    message: err.message,
-    error: err,
+  const errorDetails = {
+    name: err.name,
+    statusCode: err.statusCode,
     requestId: req.id,
     stack: err.stack,
-    ...(err.errors && { errors: err.errors }),
+    ...(err.errors && { details: err.errors }),
+  };
+
+  res.status(err.statusCode).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+    error: errorDetails,
   });
 };
 
 /**
  * Production error response.
- * - Operational errors: expose message to the client.
- * - Programming errors: return generic message (leak nothing).
+ * - Operational errors: expose message and details to the client.
+ * - Programming errors: return generic message without exposing internal details.
  */
 const sendProdError = (err, req, res) => {
   if (err.isOperational) {
-    // Operational (trusted) error → send message to client
+    // Operational (trusted) error -> send message to client
     res.status(err.statusCode).json({
-      status: err.status,
+      success: false,
       message: err.message,
-      requestId: req.id,
-      ...(err.errors && { errors: err.errors }),
+      error: err.errors || null,
     });
   } else {
-    // Programming (unknown) error → don't leak details
+    // Programming (unknown) error -> don't leak details
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
+      success: false,
       message: 'Something went wrong. Please try again later.',
-      requestId: req.id,
+      error: null,
     });
   }
 };
@@ -110,7 +126,6 @@ const sendProdError = (err, req, res) => {
  * @param {Object}   res  - Express response object.
  * @param {Function} next - Express next function (required for Express to recognize this as error middleware).
  */
-// eslint-disable-next-line no-unused-vars
 const errorHandler = (err, req, res, next) => {
   // Ensure defaults
   err.statusCode = err.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
@@ -136,6 +151,7 @@ const errorHandler = (err, req, res, next) => {
   // ── Production: normalize known errors ─────────────────────────────
   let normalizedError = { ...err, message: err.message, stack: err.stack };
 
+  if (err instanceof ZodError) normalizedError = handleZodError(err);
   if (err.name === 'CastError') normalizedError = handleCastError(err);
   if (err.name === 'ValidationError')
     normalizedError = handleValidationError(err);

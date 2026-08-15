@@ -6,35 +6,124 @@
 
 ## 1. Security Architecture Principles
 
-SABMS adheres to the **Zero Trust** security posture across all network layers and application components.
+SABMS adheres to a strict **Zero Trust** security model across all network layers and application components. No implicit trust is granted to any client, session, or internal service call.
 
 ---
 
-## 2. Authentication & Authorization (AuthN & AuthZ)
+## 2. Zero-Trust Redaction & Logging Policy
 
-- **Token Mechanism**: JSON Web Tokens (`JWT`) signed with HMAC-SHA256 for access tokens (~15 mins) paired with cryptographically random 64-byte opaque refresh tokens stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies (~7 days).
-- **Verification Mechanism**: Canonical 6-digit OTP verification via Email and Phone (Redis ephemeral state with 5 min TTL).
-- **Single-Use Rotation**: Refresh token rotation on every use with automated family revocation on reuse.
-- **Role-Based Access Control (RBAC)**: Fine-grained permissions per role (`ADMIN`, `VENUE_MANAGER`, `FACULTY`, `STUDENT`).
-- **Detailed Specification**: Refer to [`docs/modules/authentication/SECURITY.md`](./modules/authentication/SECURITY.md) and [`docs/modules/authentication/ARCHITECTURE.md`](./modules/authentication/ARCHITECTURE.md).
+```text
+┌───────────────────────────────────────────────────────────────────────────┐
+│                       SENSITIVE DATA SANITIZATION                         │
+├───────────────────────────────────────────────────────────────────────────┤
+│ ❌ STRICTLY FORBIDDEN FROM LOGS & CLIENT EXPOSURE:                        │
+│    • Plaintext user passwords (`password`, `currentPassword`, etc.)       │
+│    • Plaintext OTP codes and raw Redis OTP hashes                         │
+│    • Raw refresh token strings and cookie values                          │
+│    • JWT signature secrets and private keys                               │
+│    • Database credentials, SMTP passwords, and SMS API keys               │
+├───────────────────────────────────────────────────────────────────────────┤
+│ ✔️ REQUIRED IN STRUCTURED AUDIT LOG ENTRIES:                              │
+│    • Correlation Request ID (`requestId` via X-Request-ID)                │
+│    • Masked or Object ID user identifier (`userId`)                       │
+│    • Client IP address and sanitized User-Agent                           │
+│    • Event Type (`AUTH_LOGIN_SUCCESS`, `AUTH_OTP_SENT`, etc.)             │
+│    • Timestamp (ISO 8601 UTC)                                             │
+└───────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 3. Threat Mitigation Strategy (OWASP Top 10)
+## 3. Authentication & Token Architecture
 
-| Threat                                | Prevention Strategy              | Implementation                                         |
-| :------------------------------------ | :------------------------------- | :----------------------------------------------------- |
-| **SQL / NoSQL Injection**             | Mongoose schema sanitization     | Automatic stripping of `$` operators from user inputs. |
-| **Cross-Site Scripting (XSS)**        | React JSX auto-escaping + Helmet | Content-Security-Policy (CSP) headers via `helmet()`.  |
-| **Cross-Site Request Forgery (CSRF)** | SameSite cookie attributes       | `SameSite=Strict` HTTP-only refresh cookies.           |
-| **Broken Access Control**             | Express authorization middleware | Granular role-checking middleware on protected routes. |
-| **Rate Limiting / DoS**               | IP-based request throttling      | Express rate limiter (`express-rate-limit`).           |
+SABMS employs a **Dual-Token Architecture** to balance stateless API throughput with immediate server-side revocation capability.
+
+```text
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           DUAL-TOKEN SYSTEM                               │
+├─────────────────────────────────────┬─────────────────────────────────────┤
+│            ACCESS TOKEN             │            REFRESH TOKEN            │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│ Format: JSON Web Token (JWT)        │ Format: Opaque Random String        │
+│ Entropy: Signed HMAC-SHA256         │ Entropy: 64-byte CSPRNG hex string  │
+│ Lifespan: ~15 Minutes (Short-lived) │ Lifespan: ~7 Days (Long-lived)      │
+│ Transmission: Authorization Header  │ Transmission: HttpOnly Secure Cookie│
+│ Storage: Client In-Memory (Zustand) │ Storage: Browser Cookie Store       │
+│ Purpose: Stateless API Request Auth │ Purpose: Session Token Renewal      │
+└─────────────────────────────────────┴─────────────────────────────────────┘
+```
+
+### 3.1 Single-Use Refresh Token Rotation & Theft Detection
+
+1. **Rotation**: Every call to `POST /api/v1/auth/refresh` invalidates the submitted refresh token and generates a new access token + refresh token pair.
+2. **Replay & Theft Detection**: If an already-consumed refresh token is submitted, the system flags a token theft attempt and immediately revokes the **entire token family** in Redis, terminating all active sessions for the user.
 
 ---
 
-## 4. Security Audit & Monitoring Register
+## 4. Canonical OTP Verification Architecture
 
-- [x] **Auth Module Security & Threat Model**: Refer to [`docs/modules/authentication/SECURITY.md`](./modules/authentication/SECURITY.md)
-- [ ] Security Scan Checklists (Dependency vulnerability audit)
-- [ ] TLS/SSL Cipher Suite Specs
-- [ ] Compliance Guidelines (GDPR / Data Privacy)
+**OTP (Email and Phone)** is the canonical identity verification mechanism.
+
+```text
+┌───────────────────────────────────────────────────────────────────────────┐
+│                       CANONICAL OTP SPECIFICATION                         │
+├───────────────────────┬───────────────────────────────────────────────────┤
+│ Format                │ 6-digit numeric string (000000 – 999999)          │
+│ Generation Primitive  │ crypto.randomInt(100000, 1000000).toString()      │
+│ Lifespan (TTL)        │ 5 Minutes (300 seconds)                           │
+│ Storage               │ Redis ephemeral key: otp:<type>:<identifier>      │
+│ Stored Value          │ SHA-256/HMAC Hash (Plaintext NEVER stored)        │
+│ Verification Attempts │ Maximum 5 attempts (Invalidated on 5th failure)   │
+│ Resend Throttling     │ Minimum 60s cooldown; Maximum 3 resends per hour  │
+│ Post-Verification     │ Key immediately deleted upon successful match     │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Password Security Specification
+
+### 5.1 Hashing Specification
+
+- **Algorithm**: Argon2id (`argon2.argon2id`)
+- **Memory Cost**: 65,536 KB (64 MB)
+- **Time Cost**: 3 iterations
+- **Parallelism**: 4 threads
+- **Salt Generation**: Cryptographically secure 16-byte random salt generated per hash operation by native Argon2 bindings.
+
+### 5.2 Password Policy
+
+- **Length**: 8 to 128 characters
+- **Complexity**: Minimum 1 uppercase (`[A-Z]`), 1 lowercase (`[a-z]`), 1 number (`[0-9]`), 1 special character (`[@$!%*?&#^~_-]`).
+- **Isolation Boundary**: Hashing and verification reside exclusively in [`server/src/services/password.service.js`](file:///d:/SABMS/server/src/services/password.service.js).
+
+---
+
+## 6. Rate Limiting & Account Lockout Strategy
+
+| Target Endpoint                    | Rate Limit Policy            | Redis Key / Scope | Exceeded Behavior                                          |
+| :--------------------------------- | :--------------------------- | :---------------- | :--------------------------------------------------------- |
+| **`POST /api/v1/auth/login`**      | 5 failed attempts per 15 min | `lockout:<email>` | Account locked for 15 min; returns `429 Too Many Requests` |
+| **`POST /api/v1/auth/register`**   | 10 requests per hour         | `rl:reg:<ip>`     | Rejects with `429 Too Many Requests`                       |
+| **`POST /api/v1/auth/resend-otp`** | 1 request per 60s; max 3/hr  | `otp:resend:<id>` | Rejects with `429 Cooldown Active`                         |
+| **`POST /api/v1/auth/verify-*`**   | 5 attempts per OTP lifespan  | `otp:<type>:<id>` | Invalidation of OTP code on 5th failure                    |
+| **Global Auth Endpoints**          | 100 requests per 15 min      | `rl:auth:ip:<ip>` | Global Express rate limiter throttle                       |
+
+---
+
+## 7. OWASP Top 10 Threat Mitigation Matrix
+
+| Threat                     | Description / Attack Vector                                        | Architectural Mitigation Strategy                                                                                                               |
+| :------------------------- | :----------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Credential Stuffing**    | Automated testing of leaked credential pairs from other platforms. | Strict IP/email rate limiting via Redis; automatic account lockout after 5 consecutive failures with exponential backoff.                       |
+| **Brute-Force Login**      | Dictionary and automated wordlist attacks against user passwords.  | Memory-hard Argon2id hashing; constant-time delay simulation on failure; IP rate limiting.                                                      |
+| **OTP Brute Force**        | Guessing 6-digit verification codes (1 in 1,000,000 probability).  | Maximum 5 failed attempts per OTP key before instant invalidation; 5-minute strict TTL in Redis; minimum 60s resend cooldown.                   |
+| **Refresh Token Theft**    | Exfiltration of long-lived refresh tokens.                         | Transmitted exclusively via `HttpOnly`, `Secure`, `SameSite=Strict` cookies; JavaScript runtime access is impossible.                           |
+| **Refresh Token Replay**   | Reusing an expired or stolen refresh token.                        | **Single-Use Rotation**: Using an already-consumed refresh token immediately triggers **Token Family Revocation**, killing all active sessions. |
+| **Session Hijacking**      | Stealing session identifiers to impersonate legitimate users.      | Session binding with client IP subnet and User-Agent fingerprint validation; easy one-click "Logout from all devices".                          |
+| **JWT Access Token Theft** | Intercepting short-lived access tokens.                            | Tokens expire in ~15 minutes; sensitive PII is excluded; server maintains JTI revocation blocklist in Redis.                                    |
+| **CSRF Attacks**           | Cross-site forged requests to execute authenticated state changes. | `SameSite=Strict` cookie enforcement; custom header verification (`X-Request-ID` and `Authorization` headers required).                         |
+| **XSS Attacks**            | Injected JavaScript attempting to harvest authentication tokens.   | React auto-escaping; strict Content-Security-Policy (CSP) headers via Helmet; refresh tokens isolated in `HttpOnly` cookies.                    |
+| **NoSQL Injection**        | Injecting MongoDB operator objects (`$gt`, `$ne`, etc.) in inputs. | Express 5 compatible in-place NoSQL sanitization stripping `$` keys before validation.                                                          |
+| **Account Enumeration**    | Determining valid emails via differing error responses or timing.  | Constant-time response simulation; generic responses on password reset (`"If an account exists, instructions have been sent"`).                 |
+| **Privilege Escalation**   | Manipulating role claims in JWT or request bodies.                 | Cryptographic HMAC signature verification on access tokens; RBAC permission re-validation on sensitive administrative endpoints.                |

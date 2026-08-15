@@ -6,16 +6,19 @@
 
 ## 1. Internal Module Architecture
 
-Every module inside `server/src/modules/<module_name>/` follows the **Controller-Service-Repository / Model** design pattern:
+Every module inside `server/src/modules/<module_name>/` follows the clean **Feature/Module Based Architecture** with flat files:
 
 ```text
 modules/<module_name>/
-├── controllers/      # HTTP request handling & status response formatting
-├── services/         # Pure business logic & transactional orchestration
-├── models/           # Mongoose schemas & data access methods
-├── routes/           # Express router endpoints
-├── dtos/             # Data Transfer Objects & validation rules
-└── tests/            # Module unit and integration tests
+├── <module>.routes.js       # Express router endpoints
+├── <module>.controller.js   # HTTP request extraction & status response formatting
+├── <module>.service.js      # Pure business logic & transactional orchestration
+├── <module>.repository.js   # Encapsulated database queries & persistence
+├── <module>.model.js        # Mongoose schemas & indexes (if module owns persistence)
+├── <module>.schema.js       # Zod validation schemas
+├── <module>.constants.js    # Module-specific constants
+├── <module>.helper.js       # Module helper functions
+└── <module>.response.js     # Data Transfer Objects & response sanitizers
 ```
 
 ---

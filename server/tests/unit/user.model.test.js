@@ -1,4 +1,4 @@
-const User = require('../../src/modules/users/models/User.model');
+const User = require('../../src/modules/users/user.model');
 
 describe('User Model (Sprint 2.2.2)', () => {
   it('should be a registered Mongoose model with collection name "users"', () => {

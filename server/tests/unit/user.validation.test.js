@@ -7,8 +7,8 @@ const {
   adminUpdateUserSchema,
   userIdParamSchema,
   userFilterQuerySchema,
-  validators,
-} = require('../../src/validations');
+} = require('../../src/modules/users/user.schema');
+const validators = require('../../src/shared/validators/reusableValidators');
 
 describe('User Credential Validation Contracts (Sprint 2.2.5)', () => {
   describe('Name Validation', () => {

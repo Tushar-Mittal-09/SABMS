@@ -4,13 +4,13 @@ const {
   validatePasswordPolicy,
   hashPassword,
   verifyPassword,
-} = require('../../src/modules/auth/security/password.security');
+} = require('../../src/services/password.service');
 const {
   PASSWORD_POLICY,
   ARGON2_CONFIG,
   PASSWORD_ALGORITHM,
-} = require('../../src/constants');
-const AppError = require('../../src/utils/AppError');
+} = require('../../src/shared/constants');
+const AppError = require('../../src/core/errors/AppError');
 
 describe('Password Security (Sprint 2.3)', () => {
   const validPassword = 'CorrectHorseBatteryStaple1!';

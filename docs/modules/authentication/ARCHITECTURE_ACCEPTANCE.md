@@ -21,14 +21,14 @@ HTTP Request
     ↓
 server/src/modules/auth/auth.routes.js (Endpoint definitions & middleware bindings)
     ↓
-server/src/validations/ (Zod schema validation & AppError.validationError formatting)
+server/src/shared/validators/ (Zod schema validation & AppError.validationError formatting)
     ↓
-server/src/middleware/ (Security & authentication guards)
+server/src/core/middleware/ (Security & authentication guards)
     ↓
 server/src/modules/auth/auth.controller.js (Request parsing & standardized response dispatch)
     ↓
 server/src/modules/auth/auth.service.js (Business rules & dependency orchestration)
-    ├── server/src/modules/auth/security/ (password, otp, token, session helpers)
+    ├── server/src/services/ (password.service.js, otp.service.js)
     ├── Redis Store (ephemeral state, OTP codes, session state, rate limits, lockouts)
     ├── Notification Transports (Nodemailer SMTP & SMS Gateway)
     └── server/src/modules/auth/auth.repository.js (MongoDB query encapsulation)
@@ -40,11 +40,11 @@ server/src/modules/auth/auth.service.js (Business rules & dependency orchestrati
 
 ## 3. Existing Backend Compatibility
 
-The Authentication Architecture integrates directly into the established Sprint 1 foundation:
+The Authentication Architecture integrates directly into the established backend foundation:
 
-- **Application Pipeline**: Express 5.2.1 application pipeline (`server/src/app.js`) with `trust proxy`, `X-Request-ID` correlation tracking, and centralized Winston structured logging.
-- **Security Middleware Stack (Sprint 1 Active)**: Pre-configured Helmet HTTP headers, CORS origin verification with credentials support, HPP parameter defense, and Express 5 safe in-place NoSQL injection sanitization (`server/src/middleware/security.middleware.js`).
-- **Dynamic Routing**: Automatic versioned route discovery via `server/src/routes/routeAggregator.js` mounting all auth endpoints under `/api/v1/auth/*` and `/api/v2/auth/*`.
+- **Application Pipeline**: Express 5.2.1 application pipeline (`server/src/app/app.js`) with `trust proxy`, `X-Request-ID` correlation tracking, and centralized Winston structured logging (`server/src/core/logger/logger.js`).
+- **Security Middleware Stack**: Pre-configured Helmet HTTP headers, CORS origin verification with credentials support, HPP parameter defense, and Express 5 safe in-place NoSQL injection sanitization (`server/src/core/middleware/security.middleware.js`).
+- **Dynamic Routing**: Automatic versioned route discovery via `server/src/app/routes.js` mounting all auth endpoints under `/api/v1/auth/*` and `/api/v2/auth/*`.
 - **Error & Response Contracts**: Seamless error bubbling via `catchAsync` to `AppError` and the global `errorHandler.middleware.js`, producing standardized JSON responses (`{ success: true, message, data, meta }` and `{ success: false, message, error }`).
 
 ---

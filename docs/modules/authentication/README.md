@@ -10,7 +10,7 @@ The **Authentication Module** is a core bounded context within the SABMS Modular
 
 > **Status Notice**:
 >
-> - **Sprint 2.4 Implemented**: User Registration Workflow (`POST /api/v1/auth/register`), `auth.schema.js`, `auth.controller.js`, `auth.service.js`, `auth.response.js`, Argon2id password hashing via `password.security.js`, canonical defaults (`STUDENT` role, `PENDING` status, unverified), and persistence via `UserRepository`.
+> - **Sprint 2.4 Implemented**: User Registration Workflow (`POST /api/v1/auth/register`), `auth.schema.js`, `auth.controller.js`, `auth.service.js`, `auth.response.js`, Argon2id password hashing via `services/password.service.js`, canonical defaults (`STUDENT` role, `PENDING` status, unverified), and persistence via `user.repository.js`.
 > - **Roadmap**: Canonical OTP verification dispatch (Sprint 2.5), Phone OTP (Sprint 2.6), Login & JWT token issuance (Sprint 2.7+).
 
 ---

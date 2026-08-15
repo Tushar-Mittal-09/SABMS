@@ -86,7 +86,7 @@
 
 ### 4.3 Architecture & Isolation Boundary
 
-- Hashing and verification reside exclusively in `server/src/modules/auth/security/password.security.js`.
-- No pre-save hooks in Mongoose `User.model.js`.
-- No password hashing in `User.repository.js`.
+- Hashing and verification reside exclusively in `server/src/services/password.service.js`.
+- No pre-save hooks in Mongoose `user.model.js`.
+- No password hashing in `user.repository.js`.
 - `passwordHash` is protected by `select: false` in Mongoose and stripped in `toJSON`/`toObject` transforms.

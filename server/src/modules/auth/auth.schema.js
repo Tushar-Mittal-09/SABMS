@@ -7,7 +7,7 @@ const {
   phone,
   password,
   departmentField,
-} = require('../../validations/reusableValidators');
+} = require('../../shared/validators/reusableValidators');
 
 /**
  * Public User Registration Validation Contract (Sprint 2.4).

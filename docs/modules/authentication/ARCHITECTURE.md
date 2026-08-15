@@ -10,31 +10,22 @@ The Authentication module resides in the modular monolith under `server/src/modu
 
 ```text
 server/src/modules/auth/
-│
 ├── auth.routes.js               # Route declarations & validation/auth middleware attachments
 ├── auth.controller.js           # HTTP request parsing, service invocation & response dispatch
 ├── auth.service.js              # Business logic, orchestration, security enforcement
-├── auth.repository.js           # Database queries, Mongoose persistence encapsulation
+├── auth.repository.js           # Authentication-specific persistence queries & user lookups
 ├── auth.schema.js               # Zod validation schemas for auth request bodies/queries
 ├── auth.constants.js            # Module constants (token lifetimes, OTP limits, cookie keys)
 ├── auth.helper.js               # Formatting & device header extraction helpers
-├── auth.response.js             # DTO transformers for sanitizing outgoing user objects
-│
-├── security/                    # Cryptographic and security primitives (Isolated single-responsibility)
-│   ├── password.security.js     # Password hashing, salting, constant-time verification
-│   ├── otp.security.js          # Cryptographically secure numeric generation & HMAC hashing
-│   ├── token.security.js        # JWT access token signing & verification
-│   └── session.security.js      # Session token generation, fingerprinting & revocation
-│
-├── models/                      # Mongoose Schema & Model definitions (Persistent store)
-│   ├── User.model.js            # User entity, credentials, profile, status (Sprint 2.2)
-│   ├── Role.model.js            # Roles and permission matrix (Sprint 2.2)
-│   └── Session.model.js         # Persistent session audit index (Sprint 2.16)
-│
-└── oauth/                       # Future third-party OAuth providers (Google, Microsoft SSO)
+└── auth.response.js             # DTO transformers for sanitizing outgoing user objects
+
+server/src/services/
+├── password.service.js          # Password hashing, salting, constant-time verification
+├── email.service.js             # (Sprint 2.5) Email transport service
+└── otp.service.js               # (Sprint 2.5) OTP orchestration service
 ```
 
-> **Important Boundary Rule**: This structural overview represents the **target architecture** for Sprint 2. Source code files must only be created during their specific Sprint 2 tasks (e.g., `User.model.js` in 2.2, `password.security.js` in 2.3).
+> **Important Boundary Rule**: The `auth` module is flat and contains exactly 8 files. Cryptographic utilities like `password.service.js` reside under `server/src/services/`, while shared models like `user.model.js` reside under `server/src/modules/users/`.
 
 ---
 
@@ -77,20 +68,18 @@ graph TD
 
 - **May**: Implement core business logic and workflows; enforce authentication policies; orchestrate repository calls, security utilities, Redis cache operations, and notification triggers.
 - **Must Not**: Interact with HTTP request/response objects (`req`, `res`); execute raw Mongoose database queries directly (must delegate to Repository); parse Express routing params.
-- **Dependencies**: `auth.repository.js`, `password.security.js`, `token.security.js`, `otp.security.js`, `session.security.js`, Redis client, Email/SMS services.
+- **Dependencies**: `auth.repository.js`, `password.service.js`, `token.security.js`, `otp.service.js`, `session.security.js`, Redis client, Email/SMS services.
 
 ### 2.4 Auth Repository (`auth.repository.js`)
 
 - **May**: Execute Mongoose queries (`findOne`, `create`, `updateOne`); manage database transactions; abstract database schema interactions.
 - **Must Not**: Handle HTTP concerns; generate tokens; hash passwords; send notifications.
-- **Dependencies**: `User.model.js`, `Role.model.js`, `Session.model.js`.
+- **Dependencies**: `user.model.js`, `Role.model.js`, `Session.model.js`.
 
-### 2.5 Security Utilities (`security/*.security.js`)
+### 2.5 Core Services & Cryptographic Utilities (`server/src/services/`)
 
-- **`password.security.js`**: Cryptographic password hashing and constant-time verification using Argon2/bcrypt. _Note: Complexity validation is strictly handled in Zod schemas._
-- **`otp.security.js`**: Cryptographically secure 6-digit numeric generator (`crypto.randomInt()`) and SHA-256/HMAC hashing for safe storage.
-- **`token.security.js`**: JWT access token signing, decoding, expiration validation, and signature verification.
-- **`session.security.js`**: 64-byte high-entropy opaque refresh token generation, session fingerprint hashing, and rotation management.
+- **`password.service.js`**: Cryptographic password hashing and constant-time verification using Argon2id. _Note: Complexity validation is strictly handled in Zod schemas._
+- **`otp.service.js`** (Sprint 2.5): Cryptographically secure 6-digit numeric generator (`crypto.randomInt()`) and SHA-256/HMAC hashing for safe storage.
 
 ### 2.6 Persistence & State Infrastructure
 
@@ -255,7 +244,7 @@ To preserve the modular monolith architecture without circular dependencies, the
 
 ```text
                    ┌────────────────────────┐
-                   │  server/src/constants  │  (Shared Enums & Constants)
+                   │  server/src/shared/constants  │  (Shared Enums & Constants)
                    └───────────┬────────────┘
                                │
             ┌──────────────────┴──────────────────┐

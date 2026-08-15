@@ -1,9 +1,9 @@
 'use strict';
 
-const userRepository = require('../users/repositories/User.repository');
-const { hashPassword } = require('./security/password.security');
-const { USER_ROLES, ACCOUNT_STATUSES } = require('../../constants');
-const AppError = require('../../utils/AppError');
+const userRepository = require('../users/user.repository');
+const { hashPassword } = require('../../services/password.service');
+const { USER_ROLES, ACCOUNT_STATUSES } = require('../../shared/constants');
+const AppError = require('../../core/errors/AppError');
 
 /**
  * Authentication Business Service (Sprint 2.4).
@@ -11,7 +11,7 @@ const AppError = require('../../utils/AppError');
  * Responsibilities:
  * - Orchestrates user registration business rules and data normalization.
  * - Enforces application-level duplicate email checks.
- * - Delegates password hashing to isolated cryptographic security utility.
+ * - Delegates password hashing to isolated cryptographic security service.
  * - Enforces server-controlled canonical defaults (STUDENT role, PENDING status, unverified).
  * - Persists records exclusively through UserRepository.
  * - Has no Express req/res or HTTP protocol dependencies.

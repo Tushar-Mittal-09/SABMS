@@ -1,8 +1,8 @@
 'use strict';
 
-const userRepository = require('../../src/modules/users/repositories/User.repository');
-const { UserRepository } = require('../../src/modules/users/repositories');
-const { User } = require('../../src/modules/users/models');
+const userRepository = require('../../src/modules/users/user.repository');
+const { UserRepository } = require('../../src/modules/users/user.repository');
+const User = require('../../src/modules/users/user.model');
 
 describe('User Repository (Sprint 2.2.4)', () => {
   afterEach(() => {

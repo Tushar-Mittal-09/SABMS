@@ -58,7 +58,7 @@ Thrown AppError (or normalized third-party error via errorHandler)
   ↓
 catchAsync Wrapper forwards to next(err)
   ↓
-Global Error Handler Middleware (server/src/middleware/errorHandler.middleware.js)
+Global Error Handler Middleware (server/src/core/middleware/errorHandler.middleware.js)
   ↓
 Structured Winston Error Log (with requestId, timestamp, statusCode, stack)
   ↓
@@ -76,8 +76,8 @@ Below is the complete mapping of all 17 system sequence diagrams to the SABMS Au
 ### SD-01: User Registration
 
 - **Purpose**: New user account creation with default `STUDENT` role and `PENDING` status.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.security.js`, `User.repository.js`, `User.model.js`, `auth.schema.js`, `auth.response.js`.
-- **Workflow**: Validates input fields via strict Zod schema → Normalizes email address → Performs application-level duplicate email check → Hashes password using Argon2id via `password.security.js` → Persists user with `role: STUDENT`, `status: PENDING`, `isEmailVerified: false`, `isPhoneVerified: false` via `UserRepository.create()` → Returns sanitized HTTP 201 response. (Verification initiation boundary maintained; canonical Email OTP dispatch and verification deferred to Sprint 2.5).
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `user.repository.js`, `user.model.js`, `auth.schema.js`, `auth.response.js`.
+- **Workflow**: Validates input fields via strict Zod schema → Normalizes email address → Performs application-level duplicate email check → Hashes password using Argon2id via `password.service.js` → Persists user with `role: STUDENT`, `status: PENDING`, `isEmailVerified: false`, `isPhoneVerified: false` via `userRepository.create()` → Returns sanitized HTTP 201 response. (Verification initiation boundary maintained; canonical Email OTP dispatch and verification deferred to Sprint 2.5).
 - **Attributes**: Uses OTP (`Sprint 2.5+`), Access Token (`No`), Refresh Token (`No`), Sessions (`No`), Notifications (`Sprint 2.5+`).
 - **Sprint 2 Task**: **Sprint 2.4** (Registration).
 
@@ -87,7 +87,7 @@ Below is the complete mapping of all 17 system sequence diagrams to the SABMS Au
 
 - **Purpose**: Verify account using tokenized URL link.
 - **Status**: **Optional / Legacy Reference Architecture**. (Canonical verification is **SD-16: Email OTP**).
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.repository.js`, `User.model.js`.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.repository.js`, `user.model.js`.
 - **Sprint 2 Task**: Optional reference.
 
 ---
@@ -95,7 +95,7 @@ Below is the complete mapping of all 17 system sequence diagrams to the SABMS Au
 ### SD-03: User Login
 
 - **Purpose**: Authenticate user credentials and establish a secure session.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.security.js`, `auth.repository.js`, `User.model.js`, `token.security.js`, `session.security.js`, `Redis`.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `user.model.js`, `token.security.js`, `session.security.js`, `Redis`.
 - **Workflow**: Validates login credentials → Checks account lockout state in Redis → Verifies password hash via constant-time comparison → Checks verification status (`isEmailVerified`) → Generates Access Token (JWT) & Refresh Token (64-byte opaque) → Registers session in Redis (7d TTL) → Returns Access Token in body and sets `HttpOnly` Refresh Cookie.
 - **Attributes**: Uses OTP (`No`), Access Token (`Yes`), Refresh Token (`Yes`), Sessions (`Yes`), Notifications (`No`).
 - **Sprint 2 Task**: **Sprint 2.7** (Login).
@@ -115,7 +115,7 @@ Below is the complete mapping of all 17 system sequence diagrams to the SABMS Au
 ### SD-05: Reset Password
 
 - **Purpose**: Finalize password update using verified reset OTP.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `otp.security.js`, `password.security.js`, `auth.repository.js`, `User.model.js`, `session.security.js`, `Redis`, `Email Service`.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `otp.security.js`, `password.service.js`, `auth.repository.js`, `user.model.js`, `session.security.js`, `Redis`, `Email Service`.
 - **Workflow**: Validates new password & OTP → Verifies OTP against Redis hash → Hashes new password → Updates User record in MongoDB → Triggers **Global Session Revocation** in Redis → Sends confirmation email.
 - **Attributes**: Uses OTP (`Yes`), Access Token (`No`), Refresh Token (`No`), Sessions (`Yes - Invalidation`), Notifications (`Yes - Email`).
 - **Sprint 2 Task**: **Sprint 2.13** (Reset Password).
@@ -145,7 +145,7 @@ Below is the complete mapping of all 17 system sequence diagrams to the SABMS Au
 ### SD-08: Change Password
 
 - **Purpose**: Authenticated user updates their account password.
-- **Components**: `auth.routes.js`, `auth.middleware.js`, `auth.controller.js`, `auth.service.js`, `password.security.js`, `auth.repository.js`, `session.security.js`, `Redis`, `Email Service`.
+- **Components**: `auth.routes.js`, `auth.middleware.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `session.security.js`, `Redis`, `Email Service`.
 - **Workflow**: Verifies active JWT session → Verifies current password against stored hash → Hashes new password → Updates MongoDB → Revokes all other active user sessions in Redis (preserves or refreshes current session) → Dispatches security notice email.
 - **Attributes**: Uses OTP (`No`), Access Token (`Yes`), Refresh Token (`Yes`), Sessions (`Yes`), Notifications (`Yes - Email`).
 - **Sprint 2 Task**: **Sprint 2.14** (Change Password).

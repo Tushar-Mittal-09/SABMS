@@ -1,6 +1,6 @@
 'use strict';
 
-const catchAsync = require('../../utils/catchAsync');
+const catchAsync = require('../../shared/utils/catchAsync');
 const authService = require('./auth.service');
 const { formatRegistrationResponse } = require('./auth.response');
 

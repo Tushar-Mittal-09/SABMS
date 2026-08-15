@@ -10,11 +10,11 @@ const {
   ACCOUNT_STATUS_VALUES,
   DEFAULT_ACCOUNT_STATUS,
   isValidAccountStatus,
-} = require('../../src/constants');
+} = require('../../src/shared/constants');
 const {
   userRole,
   accountStatus,
-} = require('../../src/validations/reusableValidators');
+} = require('../../src/shared/validators/reusableValidators');
 
 describe('Role & Account Status Constants (Sprint 2.2.3 Corrected)', () => {
   describe('USER_ROLES Constants', () => {

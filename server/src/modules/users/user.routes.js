@@ -3,56 +3,56 @@
 const express = require('express');
 const catchAsync = require('../../shared/utils/catchAsync');
 const {
-  validateBody,
+  validateParams,
 } = require('../../core/middleware/validateRequest.middleware');
-const { registerSchema } = require('./auth.schema');
-const authController = require('./auth.controller');
+const { userIdParamSchema } = require('./user.schema');
 
 const router = express.Router();
 
-router.post(
-  '/login',
+router.get(
+  '/',
   catchAsync(async (req, res) => {
     return res.success(
       {
-        token: 'placeholder_token',
+        users: [],
+        pagination: { page: 1, limit: 10, total: 0 },
+        requestId: req.id,
+      },
+      'Users retrieved successfully'
+    );
+  })
+);
+
+router.get(
+  '/:id',
+  validateParams(userIdParamSchema),
+  catchAsync(async (req, res) => {
+    return res.success(
+      {
+        id: req.params.id,
         requestId: req.id,
         apiVersion: req.apiVersion,
       },
-      'Login successful (placeholder)'
-    );
-  })
-);
-
-router.post('/register', validateBody(registerSchema), authController.register);
-
-router.post(
-  '/logout',
-  catchAsync(async (req, res) => {
-    return res.success(
-      {
-        loggedOut: true,
-        requestId: req.id,
-      },
-      'Logged out successfully (placeholder)'
+      'User retrieved successfully'
     );
   })
 );
 
 router.post(
-  '/refresh',
+  '/',
   catchAsync(async (req, res) => {
-    return res.success(
+    return res.created(
       {
-        token: 'placeholder_new_token',
+        id: 'pending_implementation',
         requestId: req.id,
       },
-      'Token refreshed (placeholder)'
+      'User created (placeholder)'
     );
   })
 );
 
 module.exports = {
-  authRouter: router,
+  usersRouter: router,
+  userRouter: router,
   router,
 };

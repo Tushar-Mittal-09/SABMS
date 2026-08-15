@@ -4,9 +4,11 @@ const {
   validateBody,
   validateQuery,
   validateParams,
-} = require('../../src/validations/validateRequest.middleware');
-const { validateRequest } = require('../../src/validations/requestValidation');
-const validators = require('../../src/validations/reusableValidators');
+} = require('../../src/core/middleware/validateRequest.middleware');
+const {
+  validateRequest,
+} = require('../../src/shared/validators/requestValidation');
+const validators = require('../../src/shared/validators/reusableValidators');
 
 describe('Validation Framework & AppError Normalization', () => {
   describe('Single Section Validation Middleware', () => {

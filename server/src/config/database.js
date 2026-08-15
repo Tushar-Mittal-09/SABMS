@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const config = require('./env.config');
-const logger = require('../utils/logger');
+const logger = require('../core/logger');
 
 /**
  * Production-ready Mongoose Connection Options

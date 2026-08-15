@@ -1,19 +1,17 @@
 'use strict';
 
 const request = require('supertest');
-const app = require('../../src/app');
-const { USER_ROLES, ACCOUNT_STATUSES } = require('../../src/constants');
-const { User } = require('../../src/modules/users/models');
-const userRepository = require('../../src/modules/users/repositories/User.repository');
+const app = require('../../src/app/app');
+const { USER_ROLES, ACCOUNT_STATUSES } = require('../../src/shared/constants');
+const User = require('../../src/modules/users/user.model');
+const userRepository = require('../../src/modules/users/user.repository');
 const authService = require('../../src/modules/auth/auth.service');
 const { registerSchema } = require('../../src/modules/auth/auth.schema');
 const {
   formatRegistrationResponse,
 } = require('../../src/modules/auth/auth.response');
-const {
-  verifyPassword,
-} = require('../../src/modules/auth/security/password.security');
-const AppError = require('../../src/utils/AppError');
+const { verifyPassword } = require('../../src/services/password.service');
+const AppError = require('../../src/core/errors/AppError');
 
 describe('User Registration Workflow (Sprint 2.4)', () => {
   const validRegistrationPayload = {

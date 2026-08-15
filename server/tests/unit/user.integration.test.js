@@ -1,7 +1,7 @@
 'use strict';
 
 const request = require('supertest');
-const app = require('../../src/app');
+const app = require('../../src/app/app');
 const {
   USER_ROLES,
   USER_ROLE_VALUES,
@@ -9,13 +9,13 @@ const {
   ACCOUNT_STATUSES,
   ACCOUNT_STATUS_VALUES,
   DEFAULT_ACCOUNT_STATUS,
-} = require('../../src/constants');
-const { User } = require('../../src/modules/users/models');
-const userRepository = require('../../src/modules/users/repositories/User.repository');
+} = require('../../src/shared/constants');
+const User = require('../../src/modules/users/user.model');
+const userRepository = require('../../src/modules/users/user.repository');
 const {
   createUserSchema,
   adminCreateUserSchema,
-} = require('../../src/validations');
+} = require('../../src/modules/users/user.schema');
 
 describe('User Foundation Integration (Sprint 2.2.7)', () => {
   afterEach(() => {

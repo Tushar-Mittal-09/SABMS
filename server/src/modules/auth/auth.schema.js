@@ -69,8 +69,45 @@ const resendEmailOtpSchema = z
   })
   .strict();
 
+/**
+ * Phone OTP Verification Validation Contract (Sprint 2.6).
+ *
+ * Accepted fields:
+ * - phone: E.164 phone string (required, trimmed)
+ * - otp: exactly 6 numeric digits (required)
+ *
+ * Security Boundary:
+ * - Strict schema (.strict()) strictly rejects unexpected fields and privilege escalation attempts.
+ */
+const verifyPhoneSchema = z
+  .object({
+    phone: phone({ required: true }),
+    otp: z
+      .string({ required_error: 'OTP is required' })
+      .trim()
+      .regex(/^\d{6}$/, 'OTP must be exactly 6 numeric digits'),
+  })
+  .strict();
+
+/**
+ * Phone OTP Resend Validation Contract (Sprint 2.6).
+ *
+ * Accepted fields:
+ * - phone: E.164 phone string (required, trimmed)
+ *
+ * Security Boundary:
+ * - Strict schema (.strict()) rejects unknown fields.
+ */
+const resendPhoneOtpSchema = z
+  .object({
+    phone: phone({ required: true }),
+  })
+  .strict();
+
 module.exports = {
   registerSchema,
   verifyEmailSchema,
   resendEmailOtpSchema,
+  verifyPhoneSchema,
+  resendPhoneOtpSchema,
 };

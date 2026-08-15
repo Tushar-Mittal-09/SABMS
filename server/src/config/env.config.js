@@ -53,6 +53,12 @@ const envSchema = z.object({
     .min(16, 'OTP_HASH_SECRET must be at least 16 characters long')
     .default('sabms-enterprise-otp-hmac-secret-2026'),
 
+  // SMS Provider Configuration
+  SMS_PROVIDER: z.string().default('console'),
+  SMS_API_KEY: z.string().optional(),
+  SMS_API_SECRET: z.string().optional(),
+  SMS_FROM: z.string().default('SABMS'),
+
   // Cloudinary Placeholders
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
@@ -136,6 +142,12 @@ const config = Object.freeze({
   }),
   otp: Object.freeze({
     secret: parsedEnv.OTP_HASH_SECRET,
+  }),
+  sms: Object.freeze({
+    provider: parsedEnv.SMS_PROVIDER,
+    apiKey: parsedEnv.SMS_API_KEY,
+    apiSecret: parsedEnv.SMS_API_SECRET,
+    from: parsedEnv.SMS_FROM,
   }),
   cloudinary: Object.freeze({
     cloudName: parsedEnv.CLOUDINARY_CLOUD_NAME,

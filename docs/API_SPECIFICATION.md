@@ -261,23 +261,56 @@
   }
   ```
 
-#### `POST /api/v1/auth/verify-phone-otp` `[CANONICAL - FUTURE SPRINT 2.6]`
+#### `POST /api/v1/auth/verify-phone` `[CANONICAL - SPRINT 2.6]`
 
-- **Description**: Verifies mobile phone number using 6-digit SMS OTP.
+- **Description**: Verifies user phone number using 6-digit numeric OTP stored securely in Redis. Sets `isPhoneVerified = true` while preserving existing email verification and account status.
 - **Access**: Public
 - **Request Body**:
   ```json
   {
-    "phone": "+1234567890",
-    "otp": "839201"
+    "phone": "+919876543210",
+    "otp": "582901"
   }
   ```
 - **Success Response (`200 OK`)**:
   ```json
   {
     "success": true,
-    "message": "Phone number verified successfully.",
-    "data": { "isPhoneVerified": true },
+    "message": "Phone verified successfully",
+    "data": {
+      "id": "64a7f8e9c1d2e3f4a5b6c7d8",
+      "name": "Jane Doe",
+      "email": "jane.doe@university.edu",
+      "phone": "+919876543210",
+      "department": "Computer Science",
+      "role": "STUDENT",
+      "status": "PENDING",
+      "isEmailVerified": false,
+      "isPhoneVerified": true,
+      "createdAt": "2026-08-15T12:00:00.000Z"
+    },
+    "meta": null
+  }
+  ```
+
+#### `POST /api/v1/auth/resend-phone-otp` `[CANONICAL - SPRINT 2.6]`
+
+- **Description**: Generates and dispatches a new 6-digit verification OTP to the user's phone number via SMS. Enforces 60-second cooldown and maximum 5 resends.
+- **Access**: Public (Throttled)
+- **Request Body**:
+  ```json
+  {
+    "phone": "+919876543210"
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Verification code sent successfully",
+    "data": {
+      "phone": "+919876543210"
+    },
     "meta": null
   }
   ```

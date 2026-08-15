@@ -9,12 +9,14 @@ const {
   registerSchema,
   verifyEmailSchema,
   resendEmailOtpSchema,
+  verifyPhoneSchema,
+  resendPhoneOtpSchema,
 } = require('./auth.schema');
 const authController = require('./auth.controller');
 
 const router = express.Router();
 
-// ─── Registration & Email Verification Routes (Sprint 2.4 & Sprint 2.5) ───────
+// ─── Registration & Email/Phone Verification Routes (Sprint 2.4, 2.5 & 2.6) ───
 
 router.post('/register', validateBody(registerSchema), authController.register);
 
@@ -28,6 +30,18 @@ router.post(
   '/resend-email-otp',
   validateBody(resendEmailOtpSchema),
   authController.resendEmailOtp
+);
+
+router.post(
+  '/verify-phone',
+  validateBody(verifyPhoneSchema),
+  authController.verifyPhone
+);
+
+router.post(
+  '/resend-phone-otp',
+  validateBody(resendPhoneOtpSchema),
+  authController.resendPhoneOtp
 );
 
 // ─── Placeholders for Future Sprints (Preserved) ─────────────────────────────

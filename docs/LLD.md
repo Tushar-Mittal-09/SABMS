@@ -38,7 +38,9 @@ server/src/
 │       ├── user.routes.js
 │       └── user.schema.js
 ├── services/
-│   └── password.service.js  # Argon2id password hashing & policy verification
+│   ├── email.service.js     # Nodemailer SMTP email verification dispatch
+│   ├── password.service.js  # Argon2id password hashing & policy verification
+│   └── sms.service.js       # SMS verification transport & provider adapter
 └── shared/
     ├── constants/           # User roles, account statuses, password policies, API versions
     ├── utils/               # catchAsync & common utilities

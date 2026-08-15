@@ -4,6 +4,7 @@ const userRepository = require('../users/user.repository');
 const authRepository = require('./auth.repository');
 const { hashPassword } = require('../../services/password.service');
 const emailService = require('../../services/email.service');
+const smsService = require('../../services/sms.service');
 const { USER_ROLES, ACCOUNT_STATUSES } = require('../../shared/constants');
 const {
   EMAIL_OTP_LENGTH,
@@ -11,25 +12,35 @@ const {
   EMAIL_OTP_RESEND_COOLDOWN_SECONDS,
   EMAIL_OTP_MAX_ATTEMPTS,
   EMAIL_OTP_MAX_RESENDS,
+  PHONE_OTP_LENGTH,
+  PHONE_OTP_TTL_SECONDS,
+  PHONE_OTP_RESEND_COOLDOWN_SECONDS,
+  PHONE_OTP_MAX_ATTEMPTS,
+  PHONE_OTP_MAX_RESENDS,
 } = require('./auth.constants');
 const {
   normalizeEmail,
+  normalizePhone,
   generateEmailOtp,
+  generatePhoneOtp,
   hashEmailOtp,
+  hashPhoneOtp,
   verifyEmailOtpHash,
+  verifyPhoneOtpHash,
 } = require('./auth.helper');
 const AppError = require('../../core/errors/AppError');
 const logger = require('../../core/logger');
 
 /**
- * Authentication Business Service (Sprint 2.4 & Sprint 2.5).
+ * Authentication Business Service (Sprint 2.4, Sprint 2.5 & Sprint 2.6).
  *
  * Responsibilities:
  * - Orchestrates user registration business rules and data normalization.
  * - Enforces application-level duplicate email checks.
  * - Delegates password hashing to isolated cryptographic security service.
  * - Enforces server-controlled canonical defaults (STUDENT role, PENDING status, unverified).
- * - Manages Email OTP verification lifecycle (generation, hashing, Redis storage, email dispatch, verification, resend limits).
+ * - Manages Email OTP verification lifecycle.
+ * - Manages Phone OTP verification lifecycle (generation, hashing, Redis storage, SMS dispatch, verification, resend limits).
  * - Has no Express req/res or HTTP protocol dependencies.
  */
 class AuthService {
@@ -38,11 +49,13 @@ class AuthService {
    * @param {import('../users/user.repository').UserRepository} [options.userRepo]
    * @param {import('./auth.repository').AuthRepository} [options.authRepo]
    * @param {Object} [options.emailService]
+   * @param {Object} [options.smsService]
    */
   constructor(options = {}) {
     this._userRepository = options.userRepo || userRepository;
     this._authRepository = options.authRepo || authRepository;
     this._emailService = options.emailService || emailService;
+    this._smsService = options.smsService || smsService;
   }
 
   /**
@@ -334,6 +347,239 @@ class AuthService {
    */
   async resendEmailVerificationOtp(email) {
     return this.sendEmailVerificationOtp(email);
+  }
+
+  // ─── Phone OTP Verification Methods (Sprint 2.6) ─────────────────────
+
+  /**
+   * Generates and dispatches a Phone Verification OTP via SMS.
+   *
+   * @param {string} phone - Target user phone number in E.164 format.
+   * @returns {Promise<{ phone: string, message: string }>} Sanitized success result.
+   */
+  async sendPhoneVerificationOtp(phone) {
+    // 1. Normalize phone
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) {
+      throw AppError.badRequest('Valid phone number is required');
+    }
+
+    // 2. Find user by phone
+    const user = await this._authRepository.findByPhone(normalizedPhone);
+    if (!user) {
+      throw AppError.notFound('No account found with this phone number');
+    }
+
+    // 3. Check if phone is already verified
+    if (user.isPhoneVerified) {
+      throw AppError.conflict('This phone number is already verified');
+    }
+
+    // 4. Check resend cooldown
+    const { inCooldown, ttlRemaining } =
+      await this._authRepository.getPhoneOtpCooldown(normalizedPhone);
+    if (inCooldown) {
+      throw AppError.tooManyRequests(
+        `Please wait ${ttlRemaining} seconds before requesting another verification code`
+      );
+    }
+
+    // 5. Check resend limits
+    const resendCount =
+      await this._authRepository.getPhoneOtpResendCount(normalizedPhone);
+    if (resendCount >= PHONE_OTP_MAX_RESENDS) {
+      throw AppError.tooManyRequests(
+        'Maximum verification code resend limit reached. Please try again later.'
+      );
+    }
+
+    // 6. Generate cryptographically secure 6-digit OTP
+    const otp = generatePhoneOtp(PHONE_OTP_LENGTH);
+
+    // 7. Hash OTP using HMAC
+    const otpHash = hashPhoneOtp(otp);
+
+    // 8. Construct metadata & store in Redis with TTL
+    const now = new Date();
+    const expiresAt = new Date(
+      now.getTime() + PHONE_OTP_TTL_SECONDS * 1000
+    ).toISOString();
+
+    const otpData = {
+      otpHash,
+      attempts: 0,
+      createdAt: now.toISOString(),
+      expiresAt,
+    };
+
+    try {
+      await this._authRepository.storePhoneOtp(
+        normalizedPhone,
+        otpData,
+        PHONE_OTP_TTL_SECONDS
+      );
+
+      // Update cooldown and resend counter
+      await this._authRepository.setPhoneOtpCooldown(
+        normalizedPhone,
+        PHONE_OTP_RESEND_COOLDOWN_SECONDS
+      );
+      await this._authRepository.incrementPhoneOtpResendCount(
+        normalizedPhone,
+        PHONE_OTP_TTL_SECONDS
+      );
+    } catch (redisError) {
+      logger.error(
+        `Redis operation failed during Phone OTP generation: ${redisError.message}`,
+        {
+          context: 'AuthService',
+        }
+      );
+      throw AppError.internal('Temporary service error. Please try again.');
+    }
+
+    // 9. Send verification SMS
+    const smsResult = await this._smsService.sendPhoneVerificationOtp({
+      to: normalizedPhone,
+      otp,
+    });
+
+    if (!smsResult.success) {
+      logger.error('Failed to dispatch verification SMS', {
+        context: 'AuthService',
+        recipient: normalizedPhone,
+      });
+      throw AppError.internal(
+        'Failed to send verification SMS. Please try again.'
+      );
+    }
+
+    // 10. Return sanitized success result (NEVER return the OTP or hash)
+    return {
+      phone: normalizedPhone,
+      message: 'Verification code sent successfully',
+    };
+  }
+
+  /**
+   * Verifies a Phone OTP and updates isPhoneVerified to true.
+   * NOTE: Account status and email verification status remain unchanged.
+   *
+   * @param {string} phone - User phone number.
+   * @param {string} otp - Candidate 6-digit numeric OTP.
+   * @returns {Promise<import('mongoose').Document>} Updated user document.
+   */
+  async verifyPhoneOtp(phone, otp) {
+    // 1. Normalize phone & validate candidate OTP format
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) {
+      throw AppError.badRequest('Valid phone number is required');
+    }
+
+    if (!otp || typeof otp !== 'string' || !/^\d{6}$/.test(otp.trim())) {
+      throw AppError.badRequest('Verification code must be exactly 6 digits');
+    }
+    const cleanOtp = otp.trim();
+
+    // 2. Find user in MongoDB
+    const user = await this._authRepository.findByPhone(normalizedPhone);
+    if (!user) {
+      throw AppError.notFound('No account found with this phone number');
+    }
+
+    // 3. Check if already verified
+    if (user.isPhoneVerified) {
+      throw AppError.conflict('This phone number is already verified');
+    }
+
+    // 4. Retrieve stored OTP record from Redis
+    let otpRecord;
+    try {
+      otpRecord = await this._authRepository.getPhoneOtp(normalizedPhone);
+    } catch (redisError) {
+      logger.error(`Redis error fetching Phone OTP: ${redisError.message}`, {
+        context: 'AuthService',
+      });
+      throw AppError.internal('Temporary service error. Please try again.');
+    }
+
+    if (!otpRecord) {
+      throw AppError.badRequest(
+        'Verification code has expired or is invalid. Please request a new code.'
+      );
+    }
+
+    // 5. Check if attempt limit has already been exceeded
+    if (otpRecord.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
+      await this._authRepository.deletePhoneOtp(normalizedPhone);
+      throw AppError.tooManyRequests(
+        'Maximum verification attempts exceeded. Please request a new code.'
+      );
+    }
+
+    // 6. Timing-safe verification of supplied OTP against stored hash
+    const isOtpValid = verifyPhoneOtpHash(cleanOtp, otpRecord.otpHash);
+
+    if (!isOtpValid) {
+      // Increment attempt counter in Redis
+      const updateResult =
+        await this._authRepository.incrementPhoneOtpAttempts(normalizedPhone);
+      const currentAttempts = updateResult
+        ? updateResult.attempts
+        : (otpRecord.attempts || 0) + 1;
+
+      if (currentAttempts >= PHONE_OTP_MAX_ATTEMPTS) {
+        await this._authRepository.deletePhoneOtp(normalizedPhone);
+        throw AppError.tooManyRequests(
+          'Maximum verification attempts exceeded. Please request a new code.'
+        );
+      }
+
+      throw AppError.badRequest(
+        'Invalid verification code. Please check and try again.'
+      );
+    }
+
+    // 7. Atomic User Account State Transition in MongoDB
+    // Transition ONLY isPhoneVerified = true.
+    // Account status and isEmailVerified are NOT modified.
+    const userId = user._id || user.id;
+    const updatedUser = await this._authRepository.updateUserById(userId, {
+      isPhoneVerified: true,
+    });
+
+    if (!updatedUser) {
+      throw AppError.internal('Failed to update user verification status');
+    }
+
+    // 8. Invalidate Redis OTP & resend state to prevent replay attacks
+    try {
+      await this._authRepository.clearAllPhoneOtpState(normalizedPhone);
+    } catch (err) {
+      logger.warn(
+        `Failed to clean up Phone OTP Redis state after verification: ${err.message}`,
+        {
+          context: 'AuthService',
+        }
+      );
+    }
+
+    logger.info(`Phone successfully verified for user: ${normalizedPhone}`, {
+      context: 'AuthService',
+      userId: updatedUser._id ? updatedUser._id.toString() : updatedUser.id,
+    });
+
+    return updatedUser;
+  }
+
+  /**
+   * Resends a fresh verification OTP to the user's phone.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<{ phone: string, message: string }>} Sanitized success result.
+   */
+  async resendPhoneVerificationOtp(phone) {
+    return this.sendPhoneVerificationOtp(phone);
   }
 }
 

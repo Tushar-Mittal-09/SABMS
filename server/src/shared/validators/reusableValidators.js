@@ -106,12 +106,20 @@ const password = (options = {}) => {
 const phone = (options = {}) => {
   const { required = true, fieldName = 'Phone number' } = options;
   const str = required
-    ? z.string({ required_error: `${fieldName} is required` })
+    ? z
+        .string({ required_error: `${fieldName} is required` })
+        .min(1, `${fieldName} is required`)
     : z.string();
 
-  const base = str.trim().refine((val) => !val || PHONE_REGEX.test(val), {
-    message: `${fieldName} must be a valid E.164 phone number (e.g., +1234567890)`,
-  });
+  const base = str
+    .trim()
+    .refine(
+      (val) =>
+        required ? PHONE_REGEX.test(val) : !val || PHONE_REGEX.test(val),
+      {
+        message: `${fieldName} must be a valid E.164 phone number (e.g., +1234567890)`,
+      }
+    );
 
   return required ? base : base.optional();
 };

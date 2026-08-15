@@ -5,10 +5,11 @@ const authService = require('./auth.service');
 const {
   formatRegistrationResponse,
   formatVerifyEmailResponse,
+  formatVerifyPhoneResponse,
 } = require('./auth.response');
 
 /**
- * Authentication HTTP Controller (Sprint 2.4 & Sprint 2.5).
+ * Authentication HTTP Controller (Sprint 2.4, Sprint 2.5 & Sprint 2.6).
  *
  * Responsibilities:
  * - Extracts request payload from Express request.
@@ -48,6 +49,30 @@ class AuthController {
     const result = await authService.resendEmailVerificationOtp(email);
     return res.success(
       { email: result.email },
+      'Verification code sent successfully'
+    );
+  });
+
+  /**
+   * Phone Verification OTP Submission Endpoint Handler.
+   * POST /api/v1/auth/verify-phone
+   */
+  verifyPhone = catchAsync(async (req, res) => {
+    const { phone, otp } = req.body;
+    const user = await authService.verifyPhoneOtp(phone, otp);
+    const responseData = formatVerifyPhoneResponse(user);
+    return res.success(responseData, 'Phone verified successfully');
+  });
+
+  /**
+   * Phone Verification OTP Resend Endpoint Handler.
+   * POST /api/v1/auth/resend-phone-otp
+   */
+  resendPhoneOtp = catchAsync(async (req, res) => {
+    const { phone } = req.body;
+    const result = await authService.resendPhoneVerificationOtp(phone);
+    return res.success(
+      { phone: result.phone },
       'Verification code sent successfully'
     );
   });

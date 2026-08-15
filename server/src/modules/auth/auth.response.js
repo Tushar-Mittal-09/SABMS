@@ -41,7 +41,18 @@ const formatVerifyEmailResponse = (user) => {
   return formatRegistrationResponse(user);
 };
 
+/**
+ * Formats a sanitized response payload for successful phone verification.
+ *
+ * @param {Object|import('mongoose').Document} user
+ * @returns {Object|null}
+ */
+const formatVerifyPhoneResponse = (user) => {
+  return formatRegistrationResponse(user);
+};
+
 module.exports = {
   formatRegistrationResponse,
   formatVerifyEmailResponse,
+  formatVerifyPhoneResponse,
 };

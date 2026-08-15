@@ -5,12 +5,18 @@ const { getRedisClient } = require('../../config/redis');
 const {
   EMAIL_OTP_TTL_SECONDS,
   EMAIL_OTP_RESEND_COOLDOWN_SECONDS,
+  PHONE_OTP_TTL_SECONDS,
+  PHONE_OTP_RESEND_COOLDOWN_SECONDS,
 } = require('./auth.constants');
 const {
   createOtpRedisKey,
   createOtpCooldownRedisKey,
   createOtpResendCountRedisKey,
+  createPhoneOtpRedisKey,
+  createPhoneOtpCooldownRedisKey,
+  createPhoneOtpResendCountRedisKey,
   normalizeEmail,
+  normalizePhone,
 } = require('./auth.helper');
 
 /**
@@ -71,6 +77,26 @@ class AuthRepository {
    */
   async existsByEmail(email) {
     return this._userRepository.existsByEmail(email);
+  }
+
+  /**
+   * Look up user by phone number (without password hash).
+   * @param {string} phone
+   * @returns {Promise<import('mongoose').Document|null>}
+   */
+  async findByPhone(phone) {
+    if (!phone || typeof phone !== 'string') return null;
+    return this._userRepository.findByPhone(normalizePhone(phone));
+  }
+
+  /**
+   * Check if user exists by phone number.
+   * @param {string} phone
+   * @returns {Promise<boolean>}
+   */
+  async existsByPhone(phone) {
+    if (!phone || typeof phone !== 'string') return false;
+    return this._userRepository.existsByPhone(normalizePhone(phone));
   }
 
   /**
@@ -256,6 +282,166 @@ class AuthRepository {
       redis.del(createOtpRedisKey(normalized)),
       redis.del(createOtpCooldownRedisKey(normalized)),
       redis.del(createOtpResendCountRedisKey(normalized)),
+    ]);
+  }
+
+  // ─── Redis Phone OTP Transient State Operations ──────────────────────
+
+  /**
+   * Stores hashed Phone OTP record in Redis with strict TTL.
+   *
+   * @param {string} phone - Target user phone number.
+   * @param {Object} otpData - OTP metadata payload (otpHash, attempts, createdAt, expiresAt).
+   * @param {number} [ttlSeconds=PHONE_OTP_TTL_SECONDS] - Expiry TTL in seconds.
+   * @returns {Promise<'OK'|boolean>}
+   */
+  async storePhoneOtp(phone, otpData, ttlSeconds = PHONE_OTP_TTL_SECONDS) {
+    const key = createPhoneOtpRedisKey(phone);
+    const redis = this._getRedis();
+    const payload = JSON.stringify(otpData);
+    return redis.set(key, payload, 'EX', ttlSeconds);
+  }
+
+  /**
+   * Retrieves hashed Phone OTP record from Redis.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<Object|null>} Parsed OTP data object or null if expired/non-existent.
+   */
+  async getPhoneOtp(phone) {
+    const key = createPhoneOtpRedisKey(phone);
+    const redis = this._getRedis();
+    const data = await redis.get(key);
+    if (!data) return null;
+
+    try {
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Deletes Phone OTP record from Redis immediately.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<number>} Number of keys removed (0 or 1).
+   */
+  async deletePhoneOtp(phone) {
+    const key = createPhoneOtpRedisKey(phone);
+    const redis = this._getRedis();
+    return redis.del(key);
+  }
+
+  /**
+   * Atomically increments the failed attempt count for the active Phone OTP.
+   * Preserves the remaining TTL on the key.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<{ attempts: number, otpData: Object }|null>}
+   */
+  async incrementPhoneOtpAttempts(phone) {
+    const key = createPhoneOtpRedisKey(phone);
+    const redis = this._getRedis();
+    const data = await redis.get(key);
+    if (!data) return null;
+
+    try {
+      const otpData = JSON.parse(data);
+      otpData.attempts = (otpData.attempts || 0) + 1;
+
+      const ttl = await redis.ttl(key);
+      if (ttl > 0) {
+        await redis.set(key, JSON.stringify(otpData), 'EX', ttl);
+      } else {
+        await redis.del(key);
+        return null;
+      }
+
+      return { attempts: otpData.attempts, otpData };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Sets phone OTP resend cooldown lock in Redis.
+   *
+   * @param {string} phone - Target user phone number.
+   * @param {number} [cooldownSeconds=PHONE_OTP_RESEND_COOLDOWN_SECONDS] - Cooldown period in seconds.
+   * @returns {Promise<'OK'|boolean>}
+   */
+  async setPhoneOtpCooldown(
+    phone,
+    cooldownSeconds = PHONE_OTP_RESEND_COOLDOWN_SECONDS
+  ) {
+    const key = createPhoneOtpCooldownRedisKey(phone);
+    const redis = this._getRedis();
+    return redis.set(key, '1', 'EX', cooldownSeconds);
+  }
+
+  /**
+   * Checks if a phone number is currently within the resend cooldown window.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<{ inCooldown: boolean, ttlRemaining: number }>}
+   */
+  async getPhoneOtpCooldown(phone) {
+    const key = createPhoneOtpCooldownRedisKey(phone);
+    const redis = this._getRedis();
+    const ttl = await redis.ttl(key);
+    return {
+      inCooldown: ttl > 0,
+      ttlRemaining: Math.max(ttl, 0),
+    };
+  }
+
+  /**
+   * Retrieves the current resend count for a phone number.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<number>}
+   */
+  async getPhoneOtpResendCount(phone) {
+    const key = createPhoneOtpResendCountRedisKey(phone);
+    const redis = this._getRedis();
+    const val = await redis.get(key);
+    return val ? parseInt(val, 10) : 0;
+  }
+
+  /**
+   * Increments the resend count for a phone number with sliding or fixed TTL.
+   *
+   * @param {string} phone - Target user phone number.
+   * @param {number} [ttlSeconds=PHONE_OTP_TTL_SECONDS]
+   * @returns {Promise<number>} New resend count.
+   */
+  async incrementPhoneOtpResendCount(
+    phone,
+    ttlSeconds = PHONE_OTP_TTL_SECONDS
+  ) {
+    const key = createPhoneOtpResendCountRedisKey(phone);
+    const redis = this._getRedis();
+    const count = await redis.incr(key);
+    if (count === 1) {
+      await redis.expire(key, ttlSeconds);
+    }
+    return count;
+  }
+
+  /**
+   * Cleans up all Phone OTP and resend tracking state for a phone upon successful verification.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<void>}
+   */
+  async clearAllPhoneOtpState(phone) {
+    const redis = this._getRedis();
+    const normalized = normalizePhone(phone);
+    await Promise.all([
+      redis.del(createPhoneOtpRedisKey(normalized)),
+      redis.del(createPhoneOtpCooldownRedisKey(normalized)),
+      redis.del(createPhoneOtpResendCountRedisKey(normalized)),
     ]);
   }
 }

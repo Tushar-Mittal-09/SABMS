@@ -39,6 +39,6 @@
 
 ## 4. Test Expansion Register
 
-- [ ] Auth Module Test Specs
+- [x] **Auth Module Test Specs**: Refer to [`docs/modules/authentication/TEST_CASES.md`](./modules/authentication/TEST_CASES.md)
 - [ ] Auditorium Module Test Specs
 - [ ] Booking Engine Concurrent Collision Test Specs

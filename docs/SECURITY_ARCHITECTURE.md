@@ -12,9 +12,11 @@ SABMS adheres to the **Zero Trust** security posture across all network layers a
 
 ## 2. Authentication & Authorization (AuthN & AuthZ)
 
-- **Token Mechanism**: Json Web Tokens (JWT) signed with HMAC-SHA256.
-- **Token Lifespan**: Short-lived access tokens (15 mins) paired with HTTP-only, Secure refresh cookies (7 days).
+- **Token Mechanism**: JSON Web Tokens (`JWT`) signed with HMAC-SHA256 for access tokens (~15 mins) paired with cryptographically random 64-byte opaque refresh tokens stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies (~7 days).
+- **Verification Mechanism**: Canonical 6-digit OTP verification via Email and Phone (Redis ephemeral state with 5 min TTL).
+- **Single-Use Rotation**: Refresh token rotation on every use with automated family revocation on reuse.
 - **Role-Based Access Control (RBAC)**: Fine-grained permissions per role (`ADMIN`, `VENUE_MANAGER`, `FACULTY`, `STUDENT`).
+- **Detailed Specification**: Refer to [`docs/modules/authentication/SECURITY.md`](./modules/authentication/SECURITY.md) and [`docs/modules/authentication/ARCHITECTURE.md`](./modules/authentication/ARCHITECTURE.md).
 
 ---
 
@@ -32,6 +34,7 @@ SABMS adheres to the **Zero Trust** security posture across all network layers a
 
 ## 4. Security Audit & Monitoring Register
 
+- [x] **Auth Module Security & Threat Model**: Refer to [`docs/modules/authentication/SECURITY.md`](./modules/authentication/SECURITY.md)
 - [ ] Security Scan Checklists (Dependency vulnerability audit)
 - [ ] TLS/SSL Cipher Suite Specs
 - [ ] Compliance Guidelines (GDPR / Data Privacy)

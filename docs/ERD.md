@@ -76,6 +76,6 @@ erDiagram
 
 ## 3. ERD Extension & Migration Log
 
-- [ ] Sprint 2: User & Auth ERD Refinement
+- [x] **Sprint 2: User & Auth ERD Refinement**: Refer to [`docs/modules/authentication/ARCHITECTURE.md`](./modules/authentication/ARCHITECTURE.md#1-architectural-structure)
 - [ ] Sprint 3: Auditorium & Equipment Schema Addition
 - [ ] Sprint 4: Booking Engine SlotLock Schema Addition

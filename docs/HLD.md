@@ -54,7 +54,7 @@ graph TD
 
 ## 4. Module Expansion Register
 
-- [ ] Auth Module HLD Details
+- [x] **Auth Module HLD Details**: Refer to [`docs/modules/authentication/`](./modules/authentication/README.md)
 - [ ] Auditorium Module HLD Details
 - [ ] Booking Engine HLD Details
 - [ ] Event Management HLD Details

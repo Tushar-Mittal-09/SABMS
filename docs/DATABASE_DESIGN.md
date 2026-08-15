@@ -61,6 +61,7 @@
 
 ## 4. Database Expansion Register
 
+- [x] **Sprint 2: User, Role & Session Models Architecture**: Refer to [`docs/modules/authentication/ARCHITECTURE.md`](./modules/authentication/ARCHITECTURE.md)
 - [ ] Collection Schemas for `auditoriums` & `equipment`
 - [ ] Collection Schemas for `notifications` & `audit_logs`
 - [ ] MongoDB Aggregation Pipelines for Usage Analytics

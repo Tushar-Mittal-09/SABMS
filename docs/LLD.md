@@ -57,7 +57,7 @@ class AppError extends Error {
 
 ## 4. Module LLD Expansion Register
 
-- [ ] `auth` module LLD class specs & sequence diagrams
+- [x] **`auth` module LLD class specs & sequence diagrams**: Refer to [`docs/modules/authentication/`](./modules/authentication/README.md)
 - [ ] `auditorium` module LLD class specs & sequence diagrams
 - [ ] `booking` module LLD class specs & sequence diagrams
 - [ ] `event` module LLD class specs & sequence diagrams

@@ -19,19 +19,22 @@
 
 ```json
 {
-  "status": "success",
+  "success": true,
+  "message": "Operation completed successfully",
   "data": {},
-  "message": "Operation completed successfully"
+  "meta": {}
 }
 ```
 
-### 2.2 Error Response (`400` / `401` / `403` / `404` / `500`)
+### 2.2 Error Response (`400` / `401` / `403` / `404` / `422` / `500`)
 
 ```json
 {
-  "status": "fail",
+  "success": false,
   "message": "Detailed description of error",
-  "errors": []
+  "error": {
+    "details": []
+  }
 }
 ```
 

@@ -3,6 +3,7 @@
 const http = require('http');
 const config = require('../config/env.config');
 const { connectDatabase, disconnectDatabase } = require('../config/database');
+const { connectRedis, disconnectRedis } = require('../config/redis');
 const logger = require('../core/logger');
 const app = require('./app');
 
@@ -13,7 +14,16 @@ const startServer = async () => {
     // 1. Establish MongoDB connection before accepting HTTP traffic
     await connectDatabase();
 
-    // 2. Start HTTP server listener
+    // 2. Establish Redis connection (graceful fallback if not immediately available)
+    try {
+      await connectRedis();
+    } catch (redisErr) {
+      logger.warn(`Redis initialization warning: ${redisErr.message}`, {
+        context: 'Server',
+      });
+    }
+
+    // 3. Start HTTP server listener
     server.listen(config.port, () => {
       logger.info(
         `${config.appName} operational on port ${config.port} (${config.env} mode)`,
@@ -38,6 +48,7 @@ const gracefulShutdown = (signal) => {
   server.close(async () => {
     logger.info('HTTP server closed.', { context: 'Server' });
     await disconnectDatabase();
+    await disconnectRedis();
     process.exit(0);
   });
 };

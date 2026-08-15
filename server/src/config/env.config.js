@@ -39,6 +39,19 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(2525),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default('SABMS Support <noreply@sabms.edu>'),
+
+  // Redis Ephemeral Store
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_HOST: z.string().default('localhost'),
+  REDIS_PORT: z.coerce.number().int().positive().default(6379),
+  REDIS_PASSWORD: z.string().optional(),
+
+  // OTP Cryptographic Configuration
+  OTP_HASH_SECRET: z
+    .string()
+    .min(16, 'OTP_HASH_SECRET must be at least 16 characters long')
+    .default('sabms-enterprise-otp-hmac-secret-2026'),
 
   // Cloudinary Placeholders
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -102,6 +115,12 @@ const config = Object.freeze({
   db: Object.freeze({
     uri: parsedEnv.MONGODB_URI,
   }),
+  redis: Object.freeze({
+    url: parsedEnv.REDIS_URL,
+    host: parsedEnv.REDIS_HOST,
+    port: parsedEnv.REDIS_PORT,
+    password: parsedEnv.REDIS_PASSWORD,
+  }),
   jwt: Object.freeze({
     secret: parsedEnv.JWT_SECRET,
     expiresIn: parsedEnv.JWT_EXPIRES_IN,
@@ -113,6 +132,10 @@ const config = Object.freeze({
     port: parsedEnv.SMTP_PORT,
     user: parsedEnv.SMTP_USER,
     pass: parsedEnv.SMTP_PASS,
+    from: parsedEnv.SMTP_FROM,
+  }),
+  otp: Object.freeze({
+    secret: parsedEnv.OTP_HASH_SECRET,
   }),
   cloudinary: Object.freeze({
     cloudName: parsedEnv.CLOUDINARY_CLOUD_NAME,

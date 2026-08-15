@@ -39,14 +39,15 @@
 - [x] `TC-AUTH-004`: Register with malformed email or missing fields returns `422 Unprocessable Entity`.
 - [x] `TC-AUTH-005`: Register with privilege escalation attempts (`role: ADMIN`, `status: ACTIVE`) rejects invalid fields.
 
-### 3.2 OTP Verification Tests (Sprint 2.5, 2.6, 2.15)
+### 3.2 OTP Verification Tests (Sprint 2.5 Completed, Sprint 2.6 Pending)
 
-- [ ] `TC-AUTH-010`: Verify email with valid 6-digit OTP marks user `isEmailVerified: true` and returns `200 OK`.
-- [ ] `TC-AUTH-011`: Verify with incorrect OTP increments attempt counter and returns `400 Bad Request`.
-- [ ] `TC-AUTH-012`: Submitting 5 consecutive incorrect OTPs invalidates code (`AUTH_OTP_MAX_ATTEMPTS`).
-- [ ] `TC-AUTH-013`: Submitting an expired OTP (>5 min) returns `400 Bad Request` (`AUTH_OTP_EXPIRED`).
-- [ ] `TC-AUTH-014`: Resend OTP within 60s cooldown returns `429 Too Many Requests` (`AUTH_OTP_COOLDOWN_ACTIVE`).
-- [ ] `TC-AUTH-015`: Verify phone OTP with valid 6-digit code marks `isPhoneVerified: true`.
+- [x] `TC-AUTH-010`: Verify email with valid 6-digit OTP marks user `isEmailVerified: true`, `status: ACTIVE`, and returns `200 OK`.
+- [x] `TC-AUTH-011`: Verify with incorrect OTP increments attempt counter and returns `400 Bad Request`.
+- [x] `TC-AUTH-012`: Submitting 5 consecutive incorrect OTPs invalidates code in Redis (`AUTH_OTP_MAX_ATTEMPTS`).
+- [x] `TC-AUTH-013`: Submitting an expired OTP (>10 min) returns `400 Bad Request` (`AUTH_OTP_EXPIRED`).
+- [x] `TC-AUTH-014`: Resend OTP within 60s cooldown returns `429 Too Many Requests` (`AUTH_OTP_COOLDOWN_ACTIVE`).
+- [x] `TC-AUTH-014b`: Resend OTP exceeding maximum limit (5) returns `429 Too Many Requests`.
+- [ ] `TC-AUTH-015`: Verify phone OTP with valid 6-digit code marks `isPhoneVerified: true` (Sprint 2.6).
 
 ### 3.3 Login & Session Tests (Sprint 2.7, 2.8, 2.9)
 

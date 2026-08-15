@@ -5,10 +5,32 @@ const catchAsync = require('../../shared/utils/catchAsync');
 const {
   validateBody,
 } = require('../../core/middleware/validateRequest.middleware');
-const { registerSchema } = require('./auth.schema');
+const {
+  registerSchema,
+  verifyEmailSchema,
+  resendEmailOtpSchema,
+} = require('./auth.schema');
 const authController = require('./auth.controller');
 
 const router = express.Router();
+
+// ─── Registration & Email Verification Routes (Sprint 2.4 & Sprint 2.5) ───────
+
+router.post('/register', validateBody(registerSchema), authController.register);
+
+router.post(
+  '/verify-email',
+  validateBody(verifyEmailSchema),
+  authController.verifyEmail
+);
+
+router.post(
+  '/resend-email-otp',
+  validateBody(resendEmailOtpSchema),
+  authController.resendEmailOtp
+);
+
+// ─── Placeholders for Future Sprints (Preserved) ─────────────────────────────
 
 router.post(
   '/login',
@@ -23,8 +45,6 @@ router.post(
     );
   })
 );
-
-router.post('/register', validateBody(registerSchema), authController.register);
 
 router.post(
   '/logout',

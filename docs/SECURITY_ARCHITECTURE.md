@@ -69,12 +69,12 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 │                       CANONICAL OTP SPECIFICATION                         │
 ├───────────────────────┬───────────────────────────────────────────────────┤
 │ Format                │ 6-digit numeric string (000000 – 999999)          │
-│ Generation Primitive  │ crypto.randomInt(100000, 1000000).toString()      │
-│ Lifespan (TTL)        │ 5 Minutes (300 seconds)                           │
-│ Storage               │ Redis ephemeral key: otp:<type>:<identifier>      │
-│ Stored Value          │ SHA-256/HMAC Hash (Plaintext NEVER stored)        │
+│ Generation Primitive  │ crypto.randomInt(0, 1000000).padStart(6, '0')     │
+│ Lifespan (TTL)        │ 10 Minutes (600 seconds)                          │
+│ Storage               │ Redis ephemeral key: auth:otp:email:<email>       │
+│ Stored Value          │ HMAC-SHA256 Hash (Plaintext NEVER stored)         │
 │ Verification Attempts │ Maximum 5 attempts (Invalidated on 5th failure)   │
-│ Resend Throttling     │ Minimum 60s cooldown; Maximum 3 resends per hour  │
+│ Resend Throttling     │ Minimum 60s cooldown; Maximum 5 resends per OTP   │
 │ Post-Verification     │ Key immediately deleted upon successful match     │
 └───────────────────────────────────────────────────────────────────────────┘
 ```

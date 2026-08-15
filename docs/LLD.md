@@ -176,17 +176,16 @@ class AppError extends Error {
 
 ## 5. Authentication Sequence Diagram Mapping (SD-01 to SD-17)
 
-### SD-01: User Registration
+### SD-01: User Registration & Email OTP Verification
 
-- **Purpose**: New user account creation with default `STUDENT` role and `PENDING` status.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `user.repository.js`, `user.model.js`, `auth.schema.js`, `auth.response.js`.
-- **Workflow**: Validates input fields via strict Zod schema → Normalizes email address → Performs duplicate check → Hashes password using Argon2id (`password.service.js`) → Persists user with `role: STUDENT`, `status: PENDING`, `isEmailVerified: false`, `isPhoneVerified: false` via `userRepository.create()` → Returns sanitized HTTP 201 response.
-- **Sprint Task**: Sprint 2.4 (Registration).
-
-### SD-02: Email Verification (Magic Link) `[OPTIONAL / LEGACY REFERENCE]`
-
-- **Purpose**: Verify account using tokenized URL query link.
-- **Status**: Optional / Legacy reference architecture. Canonical verification is **SD-16: Email OTP**.
+- **Purpose**: New user account creation with default `STUDENT` role and `PENDING` status, followed by secure Email OTP verification.
+- **Implementation Note**: The SD-01 conceptual registration flow is implemented using the **Sprint 2.5 Email OTP mechanism** rather than persistent MongoDB verification tokens. OTPs are 6-digit numeric strings with strict 10-minute (600s) TTL stored as HMAC-SHA256 hashes exclusively in Redis.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `email.service.js`, `auth.repository.js`, `user.repository.js`, `user.model.js`, `Redis`.
+- **Workflow**:
+  1. Registration: Validates input fields via strict Zod schema → Normalizes email address → Performs duplicate check → Hashes password using Argon2id (`password.service.js`) → Persists user with `role: STUDENT`, `status: PENDING`, `isEmailVerified: false`, `isPhoneVerified: false` via `userRepository.create()` → Returns sanitized HTTP 201 response.
+  2. OTP Generation: Generates cryptographically secure 6-digit OTP → Computes HMAC-SHA256 hash → Stores in Redis with 10-minute TTL (`auth:otp:email:<email>`) → Sends verification email via `email.service.js`.
+  3. Verification: User submits OTP to `POST /api/v1/auth/verify-email` → Verifies OTP against Redis hash via constant-time comparison → Transitions MongoDB User to `isEmailVerified: true` and `status: ACTIVE` → Deletes Redis OTP key immediately to prevent replay attacks → Returns sanitized HTTP 200 response.
+- **Sprint Tasks**: Sprint 2.4 (Registration) & Sprint 2.5 (Email OTP Verification).
 
 ### SD-03: User Login
 

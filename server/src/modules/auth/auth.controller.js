@@ -2,17 +2,20 @@
 
 const catchAsync = require('../../shared/utils/catchAsync');
 const authService = require('./auth.service');
-const { formatRegistrationResponse } = require('./auth.response');
+const {
+  formatRegistrationResponse,
+  formatVerifyEmailResponse,
+} = require('./auth.response');
 
 /**
- * Authentication HTTP Controller (Sprint 2.4).
+ * Authentication HTTP Controller (Sprint 2.4 & Sprint 2.5).
  *
  * Responsibilities:
  * - Extracts request payload from Express request.
  * - Delegates execution to AuthService.
  * - Formats sanitized domain response via auth.response.js.
- * - Dispatches standardized HTTP 201 response.
- * - Contains NO business logic, NO direct database/Mongoose access, and NO password hashing.
+ * - Dispatches standardized HTTP responses.
+ * - Contains NO business logic, NO direct database/Mongoose access, NO Redis operations, and NO OTP generation.
  */
 class AuthController {
   /**
@@ -23,6 +26,30 @@ class AuthController {
     const user = await authService.register(req.body);
     const responseData = formatRegistrationResponse(user);
     return res.created(responseData, 'User registered successfully');
+  });
+
+  /**
+   * Email Verification OTP Submission Endpoint Handler.
+   * POST /api/v1/auth/verify-email
+   */
+  verifyEmail = catchAsync(async (req, res) => {
+    const { email, otp } = req.body;
+    const user = await authService.verifyEmailOtp(email, otp);
+    const responseData = formatVerifyEmailResponse(user);
+    return res.success(responseData, 'Email verified successfully');
+  });
+
+  /**
+   * Email Verification OTP Resend Endpoint Handler.
+   * POST /api/v1/auth/resend-email-otp
+   */
+  resendEmailOtp = catchAsync(async (req, res) => {
+    const { email } = req.body;
+    const result = await authService.resendEmailVerificationOtp(email);
+    return res.success(
+      { email: result.email },
+      'Verification code sent successfully'
+    );
   });
 }
 

@@ -207,28 +207,61 @@
   }
   ```
 
-#### `POST /api/v1/auth/verify-email-otp` `[CANONICAL]`
+#### `POST /api/v1/auth/verify-email` `[CANONICAL - SPRINT 2.5]`
 
-- **Description**: Verifies email address using 6-digit OTP.
+- **Description**: Verifies user email address using 6-digit numeric OTP stored securely in Redis. Transitions account status to `ACTIVE` upon success.
 - **Access**: Public
 - **Request Body**:
   ```json
   {
     "email": "jane.doe@university.edu",
-    "otp": "482910"
+    "otp": "582901"
   }
   ```
 - **Success Response (`200 OK`)**:
   ```json
   {
     "success": true,
-    "message": "Email verified successfully. You may now log in.",
-    "data": { "isEmailVerified": true },
+    "message": "Email verified successfully",
+    "data": {
+      "id": "64a7f8e9c1d2e3f4a5b6c7d8",
+      "name": "Jane Doe",
+      "email": "jane.doe@university.edu",
+      "phone": "+1234567890",
+      "department": "Computer Science",
+      "role": "STUDENT",
+      "status": "ACTIVE",
+      "isEmailVerified": true,
+      "isPhoneVerified": false,
+      "createdAt": "2026-08-15T12:00:00.000Z"
+    },
     "meta": null
   }
   ```
 
-#### `POST /api/v1/auth/verify-phone-otp` `[CANONICAL]`
+#### `POST /api/v1/auth/resend-email-otp` `[CANONICAL - SPRINT 2.5]`
+
+- **Description**: Generates and dispatches a new 6-digit verification OTP to the user's email address. Enforces 60-second cooldown and maximum 5 resends.
+- **Access**: Public (Throttled)
+- **Request Body**:
+  ```json
+  {
+    "email": "jane.doe@university.edu"
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Verification code sent successfully",
+    "data": {
+      "email": "jane.doe@university.edu"
+    },
+    "meta": null
+  }
+  ```
+
+#### `POST /api/v1/auth/verify-phone-otp` `[CANONICAL - FUTURE SPRINT 2.6]`
 
 - **Description**: Verifies mobile phone number using 6-digit SMS OTP.
 - **Access**: Public
@@ -245,27 +278,6 @@
     "success": true,
     "message": "Phone number verified successfully.",
     "data": { "isPhoneVerified": true },
-    "meta": null
-  }
-  ```
-
-#### `POST /api/v1/auth/resend-otp`
-
-- **Description**: Requests a new OTP for email or phone verification with rate limit cooldown.
-- **Access**: Public (Throttled)
-- **Request Body**:
-  ```json
-  {
-    "type": "email",
-    "identifier": "jane.doe@university.edu"
-  }
-  ```
-- **Success Response (`200 OK`)**:
-  ```json
-  {
-    "success": true,
-    "message": "A new verification code has been dispatched.",
-    "data": { "cooldownSeconds": 60 },
     "meta": null
   }
   ```

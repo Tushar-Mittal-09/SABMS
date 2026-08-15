@@ -5,6 +5,7 @@
  *
  * Security Invariants:
  * - Never returns password or passwordHash
+ * - Never returns OTP, OTP hashes, or transient tokens
  * - Excludes internal MongoDB fields like __v
  * - Exposes only non-sensitive domain attributes
  *
@@ -30,6 +31,17 @@ const formatRegistrationResponse = (user) => {
   };
 };
 
+/**
+ * Formats a sanitized response payload for successful email verification.
+ *
+ * @param {Object|import('mongoose').Document} user
+ * @returns {Object|null}
+ */
+const formatVerifyEmailResponse = (user) => {
+  return formatRegistrationResponse(user);
+};
+
 module.exports = {
   formatRegistrationResponse,
+  formatVerifyEmailResponse,
 };

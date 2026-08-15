@@ -27,7 +27,7 @@
 
 #### `POST /api/v1/auth/register`
 
-- **Description**: Registers a new user account and triggers email/phone OTP dispatch.
+- **Description**: Registers a new user account with canonical default `STUDENT` role and `PENDING` account status. Password is cryptographically hashed using Argon2id. Verification initiation boundary is maintained; canonical Email OTP dispatch and verification are deferred to Sprint 2.5.
 - **Access**: Public
 - **Request Body**:
   ```json
@@ -36,19 +36,26 @@
     "email": "jane.doe@university.edu",
     "phone": "+1234567890",
     "password": "SecurePassword123!",
-    "department": "Computer Science",
-    "role": "FACULTY"
+    "department": "Computer Science"
   }
   ```
+  _(Note: `phone` and `department` are optional. Client-supplied `role`, `status`, `passwordHash`, `isEmailVerified`, `isPhoneVerified`, and `lastLoginAt` are strictly rejected by validation schema)._
 - **Success Response (`201 Created`)**:
   ```json
   {
     "success": true,
-    "message": "Registration successful. Please verify your account with the OTP sent to your email.",
+    "message": "User registered successfully",
     "data": {
-      "userId": "64a7f8e9c1d2e3f4a5b6c7d8",
+      "id": "64a7f8e9c1d2e3f4a5b6c7d8",
+      "name": "Jane Doe",
       "email": "jane.doe@university.edu",
-      "requiresVerification": true
+      "phone": "+1234567890",
+      "department": "Computer Science",
+      "role": "STUDENT",
+      "status": "PENDING",
+      "isEmailVerified": false,
+      "isPhoneVerified": false,
+      "createdAt": "2026-08-15T12:00:00.000Z"
     },
     "meta": null
   }

@@ -1,6 +1,10 @@
+'use strict';
+
 const express = require('express');
-const { StatusCodes } = require('http-status-codes');
 const catchAsync = require('../../utils/catchAsync');
+const { validateBody } = require('../../validations');
+const { registerSchema } = require('./auth.schema');
+const authController = require('./auth.controller');
 
 const router = express.Router();
 
@@ -18,18 +22,7 @@ router.post(
   })
 );
 
-router.post(
-  '/register',
-  catchAsync(async (req, res) => {
-    return res.status(StatusCodes.CREATED).success(
-      {
-        id: 'pending_implementation',
-        requestId: req.id,
-      },
-      'Registration successful (placeholder)'
-    );
-  })
-);
+router.post('/register', validateBody(registerSchema), authController.register);
 
 router.post(
   '/logout',

@@ -10,8 +10,8 @@ The **Authentication Module** is a core bounded context within the SABMS Modular
 
 > **Status Notice**:
 >
-> - **Current Implementation (Sprint 1 Baseline)**: Foundational Express 5 routing aggregator, request validation schemas, centralized Winston logging, AppError hierarchy, security middlewares (Helmet, CORS, HPP, NoSQL sanitization), and route placeholders in `server/src/modules/auth/auth.routes.js`.
-> - **Target Architecture (Sprint 2 Scope)**: Full tiered architecture (Controller, Service, Repository, Security Helpers, Mongoose Models, Redis State Store, Email/SMS Transports) documented herein for phased implementation across Sprint 2 (Tasks 2.2 – 2.21).
+> - **Sprint 2.4 Implemented**: User Registration Workflow (`POST /api/v1/auth/register`), `auth.schema.js`, `auth.controller.js`, `auth.service.js`, `auth.response.js`, Argon2id password hashing via `password.security.js`, canonical defaults (`STUDENT` role, `PENDING` status, unverified), and persistence via `UserRepository`.
+> - **Roadmap**: Canonical OTP verification dispatch (Sprint 2.5), Phone OTP (Sprint 2.6), Login & JWT token issuance (Sprint 2.7+).
 
 ---
 

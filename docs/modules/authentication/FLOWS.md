@@ -75,10 +75,10 @@ Below is the complete mapping of all 17 system sequence diagrams to the SABMS Au
 
 ### SD-01: User Registration
 
-- **Purpose**: New user account creation with unverified status.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.security.js`, `auth.repository.js`, `User.model.js`, `otp.security.js`, `Redis`, `Email/SMS Service`.
-- **Workflow**: Validates input fields → Hashes password via `password.security.js` → Persists user with `isEmailVerified: false` → Generates 6-digit verification OTP → Stores OTP hash in Redis (5 min TTL) → Dispatches OTP via Email/SMS.
-- **Attributes**: Uses OTP (`Yes`), Access Token (`No`), Refresh Token (`No`), Sessions (`No`), Notifications (`Yes - Email/SMS`).
+- **Purpose**: New user account creation with default `STUDENT` role and `PENDING` status.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.security.js`, `User.repository.js`, `User.model.js`, `auth.schema.js`, `auth.response.js`.
+- **Workflow**: Validates input fields via strict Zod schema → Normalizes email address → Performs application-level duplicate email check → Hashes password using Argon2id via `password.security.js` → Persists user with `role: STUDENT`, `status: PENDING`, `isEmailVerified: false`, `isPhoneVerified: false` via `UserRepository.create()` → Returns sanitized HTTP 201 response. (Verification initiation boundary maintained; canonical Email OTP dispatch and verification deferred to Sprint 2.5).
+- **Attributes**: Uses OTP (`Sprint 2.5+`), Access Token (`No`), Refresh Token (`No`), Sessions (`No`), Notifications (`Sprint 2.5+`).
 - **Sprint 2 Task**: **Sprint 2.4** (Registration).
 
 ---

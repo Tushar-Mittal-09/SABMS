@@ -51,9 +51,12 @@
 - [x] `TC-AUTH-016`: Phone OTP resend enforces 60s cooldown and 5 maximum resends (Sprint 2.6).
 - [x] `TC-AUTH-017`: Phone verification preserves existing email verification and account status (Sprint 2.6).
 
-### 3.3 Login & Session Tests (Sprint 2.7, 2.8, 2.9)
+### 3.3 Login & Session Tests (Sprint 2.7 & Sprint 2.8 Completed)
 
-- [ ] `TC-AUTH-020`: Login with valid verified credentials returns `200 OK`, JWT in body, and `HttpOnly` refresh cookie (Sprint 2.8 & 2.9).
+- [x] `TC-AUTH-020a`: Login with valid verified credentials returns `200 OK` with valid signed JWT Access Token (`auth.access-token.test.js`) (Sprint 2.8).
+- [x] `TC-AUTH-020b`: JWT Access Token contains valid claims (`sub`, `role`, `iat`, `exp`, `iss`, `aud`) and strictly excludes sensitive fields (`auth.access-token.test.js`) (Sprint 2.8).
+- [x] `TC-AUTH-020c`: Access token verification enforces HS256 algorithm, secret integrity, issuer, and audience matching (`auth.access-token.test.js`) (Sprint 2.8).
+- [ ] `TC-AUTH-020d`: Login issues HttpOnly refresh token cookie (Sprint 2.9).
 - [x] `TC-AUTH-021`: Login with invalid password returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`) (Sprint 2.7).
 - [x] `TC-AUTH-022`: Login with non-existent email returns `401 Unauthorized` (timing-safe & anti-enumeration) (Sprint 2.7).
 - [ ] `TC-AUTH-023`: 5 consecutive failed logins locks account for 15 minutes (`429 Too Many Requests`) (Sprint 2.17).

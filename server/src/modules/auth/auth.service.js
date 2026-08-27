@@ -30,7 +30,9 @@ const {
   hashPhoneOtp,
   verifyEmailOtpHash,
   verifyPhoneOtpHash,
+  generateAccessToken,
 } = require('./auth.helper');
+const config = require('../../config/env.config');
 const AppError = require('../../core/errors/AppError');
 const logger = require('../../core/logger');
 
@@ -698,13 +700,27 @@ class AuthService {
 
     const resultUser = updatedUser || user;
 
+    // 7. Generate cryptographically signed JWT access token (Sprint 2.8)
+    const accessToken = generateAccessToken(resultUser);
+
     logger.info(`User logged in successfully: ${normalizedEmail}`, {
       context: 'AuthService',
       userId: resultUser._id ? resultUser._id.toString() : resultUser.id,
       role: resultUser.role,
     });
 
-    return resultUser;
+    const rawUser =
+      typeof resultUser.toObject === 'function'
+        ? resultUser.toObject()
+        : resultUser;
+
+    return {
+      ...rawUser,
+      user: resultUser,
+      accessToken,
+      tokenType: 'Bearer',
+      expiresIn: config.jwt?.accessExpiresIn || config.jwt?.expiresIn || '15m',
+    };
   }
 }
 

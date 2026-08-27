@@ -315,9 +315,14 @@
   }
   ```
 
-#### `POST /api/v1/auth/login` `[CANONICAL - SPRINT 2.7]`
+#### `POST /api/v1/auth/login` `[CANONICAL - SPRINT 2.7 & SPRINT 2.8]`
 
-- **Description**: Authenticates user credentials (email & password) using Argon2id constant-time verification, validates account state (active & verified), updates `lastLoginAt`, and returns sanitized user profile. Token issuance (JWT Access Token & HttpOnly Refresh Cookie) is integrated in Sprint 2.8+.
+- **Description**: Authenticates user credentials (email & password) using Argon2id constant-time verification, validates account state (active & verified), updates `lastLoginAt`, and returns sanitized user profile along with a cryptographically signed short-lived JWT Access Token.
+- **Sprint Boundaries**:
+  - **Access Token (JWT)**: Sprint 2.8 `[IMPLEMENTED]` (Short-lived, ~15m, signed with HMAC-SHA256, contains `sub`, `role`, `iat`, `exp`, `iss`, `aud`).
+  - **Refresh Tokens & HttpOnly Cookie**: Sprint 2.9 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - **Single-Use Token Rotation & Theft Detection**: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - **Logout & Session Invalidation**: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
 - **Access**: Public
 - **Request Body**:
   ```json
@@ -342,7 +347,23 @@
       "isEmailVerified": true,
       "isPhoneVerified": true,
       "lastLoginAt": "2026-08-15T12:00:00.000Z",
-      "createdAt": "2026-08-15T12:00:00.000Z"
+      "createdAt": "2026-08-15T12:00:00.000Z",
+      "user": {
+        "id": "64a7f8e9c1d2e3f4a5b6c7d8",
+        "name": "Jane Doe",
+        "email": "jane.doe@university.edu",
+        "phone": "+919876543210",
+        "department": "Computer Science",
+        "role": "STUDENT",
+        "status": "ACTIVE",
+        "isEmailVerified": true,
+        "isPhoneVerified": true,
+        "lastLoginAt": "2026-08-15T12:00:00.000Z",
+        "createdAt": "2026-08-15T12:00:00.000Z"
+      },
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "tokenType": "Bearer",
+      "expiresIn": "15m"
     },
     "meta": null
   }

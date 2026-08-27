@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { Buffer } = require('buffer');
+const jwt = require('jsonwebtoken');
 const config = require('../../config/env.config');
 const {
   EMAIL_OTP_LENGTH,
@@ -14,6 +15,7 @@ const {
   PHONE_OTP_COOLDOWN_KEY_PREFIX,
   PHONE_OTP_RESEND_KEY_PREFIX,
   PHONE_OTP_HASH_ALGORITHM,
+  JWT_POLICY,
 } = require('./auth.constants');
 
 /**
@@ -275,6 +277,132 @@ const verifyPhoneOtpHash = (
   );
 };
 
+// ─── JWT Access Token Helpers (Sprint 2.8) ───────────────────────────
+
+/**
+ * Generates a short-lived, cryptographically signed JWT access token for an authenticated user.
+ *
+ * Security Invariants:
+ * - Contains ONLY minimal safe claims (sub, role, iat, exp, iss, aud).
+ * - Never includes passwords, password hashes, OTPs, OTP hashes, Redis keys, or secrets.
+ * - Algorithm is strictly pinned to configured HMAC algorithm (default: HS256).
+ *
+ * @param {Object|import('mongoose').Document} user - Authenticated user entity or object with id/role.
+ * @param {Object} [options={}] - Custom overrides for testing/configuration.
+ * @param {string} [options.secret] - Optional secret override.
+ * @param {string} [options.expiresIn] - Optional expiration override.
+ * @param {string} [options.issuer] - Optional issuer override.
+ * @param {string} [options.audience] - Optional audience override.
+ * @param {string} [options.algorithm] - Optional algorithm override.
+ * @returns {string} Signed JWT access token.
+ */
+const generateAccessToken = (user, options = {}) => {
+  if (!user) {
+    throw new Error('User entity is required to generate an access token');
+  }
+
+  const rawUser = typeof user.toObject === 'function' ? user.toObject() : user;
+  const userId = rawUser._id
+    ? rawUser._id.toString()
+    : rawUser.id || (typeof user === 'string' ? user : null);
+
+  if (!userId) {
+    throw new Error('User ID (sub) is required to generate an access token');
+  }
+
+  const payload = {
+    sub: String(userId),
+    ...(rawUser.role ? { role: rawUser.role } : {}),
+  };
+
+  const secret =
+    options.secret || config.jwt?.accessSecret || config.jwt?.secret;
+
+  if (!secret) {
+    throw new Error('JWT access secret is required for signing');
+  }
+
+  const signOptions = {
+    algorithm: options.algorithm || JWT_POLICY.ALGORITHM,
+    expiresIn:
+      options.expiresIn ||
+      config.jwt?.accessExpiresIn ||
+      config.jwt?.expiresIn ||
+      JWT_POLICY.DEFAULT_ACCESS_EXPIRES_IN,
+    issuer:
+      options.issuer !== undefined
+        ? options.issuer
+        : config.jwt?.issuer || JWT_POLICY.DEFAULT_ISSUER,
+    audience:
+      options.audience !== undefined
+        ? options.audience
+        : config.jwt?.audience || JWT_POLICY.DEFAULT_AUDIENCE,
+  };
+
+  return jwt.sign(payload, secret, signOptions);
+};
+
+/**
+ * Verifies and decodes a JWT access token against cryptographic signature, algorithm, issuer, and audience.
+ *
+ * @param {string} token - Raw JWT string.
+ * @param {Object} [options={}] - Verification options.
+ * @param {string} [options.secret] - Secret key override.
+ * @param {string[]} [options.algorithms] - Approved algorithms list (defaults to pinned HS256).
+ * @param {string|boolean} [options.issuer] - Expected issuer (defaults to configured issuer).
+ * @param {string|boolean} [options.audience] - Expected audience (defaults to configured audience).
+ * @param {boolean} [options.ignoreExpiration=false] - If true, ignores expiration check.
+ * @returns {Object} Decoded token payload.
+ */
+const verifyAccessToken = (token, options = {}) => {
+  if (!token || typeof token !== 'string') {
+    throw new Error('Access token string is required for verification');
+  }
+
+  const secret =
+    options.secret || config.jwt?.accessSecret || config.jwt?.secret;
+
+  if (!secret) {
+    throw new Error('JWT access secret is required for verification');
+  }
+
+  const verifyOptions = {
+    algorithms: options.algorithms || [JWT_POLICY.ALGORITHM],
+    ...(options.ignoreExpiration ? { ignoreExpiration: true } : {}),
+  };
+
+  if (options.issuer !== undefined) {
+    if (options.issuer !== false) {
+      verifyOptions.issuer = options.issuer;
+    }
+  } else if (config.jwt?.issuer || JWT_POLICY.DEFAULT_ISSUER) {
+    verifyOptions.issuer = config.jwt?.issuer || JWT_POLICY.DEFAULT_ISSUER;
+  }
+
+  if (options.audience !== undefined) {
+    if (options.audience !== false) {
+      verifyOptions.audience = options.audience;
+    }
+  } else if (config.jwt?.audience || JWT_POLICY.DEFAULT_AUDIENCE) {
+    verifyOptions.audience =
+      config.jwt?.audience || JWT_POLICY.DEFAULT_AUDIENCE;
+  }
+
+  return jwt.verify(token, secret, verifyOptions);
+};
+
+/**
+ * Decodes a JWT token without verification.
+ *
+ * @param {string} token - Raw JWT string.
+ * @param {Object} [options={}] - Options (e.g. { complete: true }).
+ * @returns {Object|null} Decoded payload or token object.
+ */
+const decodeAccessToken = (token, options = {}) => {
+  if (!token || typeof token !== 'string') return null;
+  return jwt.decode(token, { complete: options.complete || false });
+};
+
 module.exports = {
   extractClientIp,
   extractUserAgent,
@@ -295,4 +423,7 @@ module.exports = {
   verifyOtpHash,
   verifyEmailOtpHash,
   verifyPhoneOtpHash,
+  generateAccessToken,
+  verifyAccessToken,
+  decodeAccessToken,
 };

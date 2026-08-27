@@ -8,74 +8,90 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 /**
  * Zod validation schema for backend environment variables
  */
-const envSchema = z.object({
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
-  PORT: z.coerce.number().int().positive().default(5000),
-  APP_NAME: z.string().default('Smart Auditorium Booking & Management System'),
-  API_PREFIX: z.string().default('/api'),
-  API_VERSION: z.string().default('v1'),
-  CLIENT_URL: z.string().default('http://localhost:3000'),
-  LOG_LEVEL: z
-    .enum(['error', 'warn', 'info', 'http', 'debug'])
-    .default('debug'),
+const envSchema = z
+  .object({
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
+    PORT: z.coerce.number().int().positive().default(5000),
+    APP_NAME: z
+      .string()
+      .default('Smart Auditorium Booking & Management System'),
+    API_PREFIX: z.string().default('/api'),
+    API_VERSION: z.string().default('v1'),
+    CLIENT_URL: z.string().default('http://localhost:3000'),
+    LOG_LEVEL: z
+      .enum(['error', 'warn', 'info', 'http', 'debug'])
+      .default('debug'),
 
-  // Database
-  MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+    // Database
+    MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
 
-  // JWT Placeholders
-  JWT_SECRET: z
-    .string()
-    .min(16, 'JWT_SECRET must be at least 16 characters long'),
-  JWT_EXPIRES_IN: z.string().default('15m'),
-  JWT_REFRESH_SECRET: z
-    .string()
-    .min(16, 'JWT_REFRESH_SECRET must be at least 16 characters long'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+    // JWT Configuration (Sprint 2.8)
+    JWT_SECRET: z
+      .string()
+      .min(16, 'JWT_SECRET must be at least 16 characters long')
+      .optional(),
+    JWT_ACCESS_SECRET: z
+      .string()
+      .min(16, 'JWT_ACCESS_SECRET must be at least 16 characters long')
+      .optional(),
+    JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
+    JWT_EXPIRES_IN: z.string().default('15m'),
+    JWT_ISSUER: z.string().default('sabms-backend'),
+    JWT_AUDIENCE: z.string().default('sabms-client'),
+    JWT_REFRESH_SECRET: z
+      .string()
+      .min(16, 'JWT_REFRESH_SECRET must be at least 16 characters long'),
+    JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
 
-  // SMTP Email Placeholders
-  SMTP_HOST: z.string().default('smtp.mailtrap.io'),
-  SMTP_PORT: z.coerce.number().int().positive().default(2525),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default('SABMS Support <noreply@sabms.edu>'),
+    // SMTP Email Placeholders
+    SMTP_HOST: z.string().default('smtp.mailtrap.io'),
+    SMTP_PORT: z.coerce.number().int().positive().default(2525),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_FROM: z.string().default('SABMS Support <noreply@sabms.edu>'),
 
-  // Redis Ephemeral Store
-  REDIS_URL: z.string().default('redis://localhost:6379'),
-  REDIS_HOST: z.string().default('localhost'),
-  REDIS_PORT: z.coerce.number().int().positive().default(6379),
-  REDIS_PASSWORD: z.string().optional(),
+    // Redis Ephemeral Store
+    REDIS_URL: z.string().default('redis://localhost:6379'),
+    REDIS_HOST: z.string().default('localhost'),
+    REDIS_PORT: z.coerce.number().int().positive().default(6379),
+    REDIS_PASSWORD: z.string().optional(),
 
-  // OTP Cryptographic Configuration
-  OTP_HASH_SECRET: z
-    .string()
-    .min(16, 'OTP_HASH_SECRET must be at least 16 characters long')
-    .default('sabms-enterprise-otp-hmac-secret-2026'),
+    // OTP Cryptographic Configuration
+    OTP_HASH_SECRET: z
+      .string()
+      .min(16, 'OTP_HASH_SECRET must be at least 16 characters long')
+      .default('sabms-enterprise-otp-hmac-secret-2026'),
 
-  // SMS Provider Configuration
-  SMS_PROVIDER: z.string().default('console'),
-  SMS_API_KEY: z.string().optional(),
-  SMS_API_SECRET: z.string().optional(),
-  SMS_FROM: z.string().default('SABMS'),
-  TWILIO_ACCOUNT_SID: z.string().optional(),
-  TWILIO_AUTH_TOKEN: z.string().optional(),
-  TWILIO_PHONE_NUMBER: z.string().optional(),
-  TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
+    // SMS Provider Configuration
+    SMS_PROVIDER: z.string().default('console'),
+    SMS_API_KEY: z.string().optional(),
+    SMS_API_SECRET: z.string().optional(),
+    SMS_FROM: z.string().default('SABMS'),
+    TWILIO_ACCOUNT_SID: z.string().optional(),
+    TWILIO_AUTH_TOKEN: z.string().optional(),
+    TWILIO_PHONE_NUMBER: z.string().optional(),
+    TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
 
-  // Cloudinary Placeholders
-  CLOUDINARY_CLOUD_NAME: z.string().optional(),
-  CLOUDINARY_API_KEY: z.string().optional(),
-  CLOUDINARY_API_SECRET: z.string().optional(),
+    // Cloudinary Placeholders
+    CLOUDINARY_CLOUD_NAME: z.string().optional(),
+    CLOUDINARY_API_KEY: z.string().optional(),
+    CLOUDINARY_API_SECRET: z.string().optional(),
 
-  // Security Configuration
-  COOKIE_SECRET: z
-    .string()
-    .default('sabms-enterprise-secure-cookie-secret-key-2026'),
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(100),
-  PAYLOAD_SIZE_LIMIT: z.string().default('10mb'),
-});
+    // Security Configuration
+    COOKIE_SECRET: z
+      .string()
+      .default('sabms-enterprise-secure-cookie-secret-key-2026'),
+    RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
+    RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(100),
+    PAYLOAD_SIZE_LIMIT: z.string().default('10mb'),
+  })
+  .refine((data) => Boolean(data.JWT_ACCESS_SECRET || data.JWT_SECRET), {
+    message:
+      'JWT_ACCESS_SECRET or JWT_SECRET must be provided and be at least 16 characters long',
+    path: ['JWT_ACCESS_SECRET'],
+  });
 
 /**
  * Validate process.env against Zod schema
@@ -132,8 +148,14 @@ const config = Object.freeze({
     password: parsedEnv.REDIS_PASSWORD,
   }),
   jwt: Object.freeze({
-    secret: parsedEnv.JWT_SECRET,
-    expiresIn: parsedEnv.JWT_EXPIRES_IN,
+    secret: parsedEnv.JWT_ACCESS_SECRET || parsedEnv.JWT_SECRET,
+    accessSecret: parsedEnv.JWT_ACCESS_SECRET || parsedEnv.JWT_SECRET,
+    expiresIn:
+      parsedEnv.JWT_ACCESS_EXPIRES_IN || parsedEnv.JWT_EXPIRES_IN || '15m',
+    accessExpiresIn:
+      parsedEnv.JWT_ACCESS_EXPIRES_IN || parsedEnv.JWT_EXPIRES_IN || '15m',
+    issuer: parsedEnv.JWT_ISSUER,
+    audience: parsedEnv.JWT_AUDIENCE,
     refreshSecret: parsedEnv.JWT_REFRESH_SECRET,
     refreshExpiresIn: parsedEnv.JWT_REFRESH_EXPIRES_IN,
   }),

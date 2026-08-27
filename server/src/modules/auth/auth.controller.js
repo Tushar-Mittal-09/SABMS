@@ -79,12 +79,17 @@ class AuthController {
   });
 
   /**
-   * User Login Endpoint Handler (Sprint 2.7).
+   * User Login Endpoint Handler (Sprint 2.7 & Sprint 2.8).
    * POST /api/v1/auth/login
    */
   login = catchAsync(async (req, res) => {
-    const user = await authService.login(req.body);
-    const responseData = formatLoginResponse(user);
+    const loginResult = await authService.login(req.body);
+    const user = loginResult.user || loginResult;
+    const responseData = formatLoginResponse(user, {
+      accessToken: loginResult.accessToken,
+      tokenType: loginResult.tokenType || 'Bearer',
+      expiresIn: loginResult.expiresIn,
+    });
     return res.success(responseData, 'Authentication successful.');
   });
 }

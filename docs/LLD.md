@@ -189,10 +189,10 @@ class AppError extends Error {
   3. Verification: User submits OTP to `POST /api/v1/auth/verify-email` → Verifies OTP against Redis hash via constant-time comparison → Transitions MongoDB User to `isEmailVerified: true` and `status: ACTIVE` → Deletes Redis OTP key immediately to prevent replay attacks → Returns sanitized HTTP 200 response.
 - **Sprint Tasks**: Sprint 2.4 (Registration) & Sprint 2.5 (Email OTP Verification).
 
-### SD-03: User Login
+### SD-03: User Login & JWT Access Token Issuance
 
-- **Purpose**: Authenticate user credentials securely, enforce verification and active status invariants, and update login activity timestamp.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `user.model.js`.
+- **Purpose**: Authenticate user credentials securely, enforce verification and active status invariants, update login activity timestamp, and issue a short-lived JWT Access Token.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.helper.js`, `password.service.js`, `auth.repository.js`, `user.model.js`.
 - **Workflow**:
   1. Validates input schema via strict Zod `loginSchema` (email normalized, password unmutated).
   2. Queries user record including `passwordHash` via `authRepository.findByEmailWithPasswordHash()`.
@@ -200,9 +200,14 @@ class AppError extends Error {
   4. Returns generic `401 Unauthorized` for both missing user and wrong password to prevent account enumeration.
   5. Enforces account state constraints: rejects `SUSPENDED`/`INACTIVE` accounts with `403 Forbidden` (`AUTH_ACCOUNT_DISABLED`), and unverified accounts with `403 Forbidden` (`AUTH_ACCOUNT_UNVERIFIED`).
   6. Updates `lastLoginAt` in MongoDB via `authRepository.updateLastLogin()`.
-  7. Formats and returns safe domain user entity (`formatLoginResponse`).
-  8. **Token Boundary Note**: JWT Access Token issuance and Refresh Cookie session lifecycle are integrated in Sprints 2.8, 2.9 & 2.10.
-- **Sprint Task**: Sprint 2.7 (Login).
+  7. Generates cryptographically signed short-lived JWT Access Token via `generateAccessToken()` in `auth.helper.js` (HMAC-SHA256, contains `sub`, `role`, `iat`, `exp`, `iss`, `aud`).
+  8. Formats and returns safe domain user entity and token metadata (`formatLoginResponse`).
+  9. **Sprint Boundaries**:
+     - JWT Access Token: Sprint 2.8 `[IMPLEMENTED]`.
+     - Refresh Tokens & Cookie: Sprint 2.9 `[NOT IMPLEMENTED]`.
+     - Token Rotation: Sprint 2.10 `[NOT IMPLEMENTED]`.
+     - Logout: Sprint 2.11 `[NOT IMPLEMENTED]`.
+- **Sprint Tasks**: Sprint 2.7 (Login) & Sprint 2.8 (JWT Access Token).
 
 ### SD-04: Forgot Password
 

@@ -52,22 +52,30 @@ const formatVerifyPhoneResponse = (user) => {
 };
 
 /**
- * Formats a sanitized response payload for successful user login (Sprint 2.7).
+ * Formats a sanitized response payload for successful user login (Sprint 2.7 & Sprint 2.8).
  *
  * Security Invariants:
  * - Excludes password, passwordHash, and __v
- * - Excludes session tokens (deferred to Sprint 2.8+)
+ * - Excludes OTP, OTP hashes, Redis keys, and internal secrets
+ * - Emits secure JWT access token, tokenType, and expiresIn metadata when issued (Sprint 2.8)
  * - Exposes safe user domain profile including lastLoginAt
  *
  * @param {Object|import('mongoose').Document} user
+ * @param {Object} [tokenData]
+ * @param {string} [tokenData.accessToken]
+ * @param {string} [tokenData.tokenType='Bearer']
+ * @param {string} [tokenData.expiresIn]
  * @returns {Object|null}
  */
-const formatLoginResponse = (user) => {
+const formatLoginResponse = (
+  user,
+  { accessToken, tokenType = 'Bearer', expiresIn } = {}
+) => {
   if (!user) return null;
 
   const rawUser = typeof user.toObject === 'function' ? user.toObject() : user;
 
-  return {
+  const sanitizedUser = {
     id: rawUser._id ? rawUser._id.toString() : rawUser.id,
     name: rawUser.name,
     email: rawUser.email,
@@ -80,6 +88,21 @@ const formatLoginResponse = (user) => {
     lastLoginAt: rawUser.lastLoginAt !== undefined ? rawUser.lastLoginAt : null,
     createdAt: rawUser.createdAt,
   };
+
+  const response = {
+    ...sanitizedUser,
+    user: sanitizedUser,
+  };
+
+  if (accessToken) {
+    response.accessToken = accessToken;
+    response.tokenType = tokenType;
+    if (expiresIn !== undefined) {
+      response.expiresIn = expiresIn;
+    }
+  }
+
+  return response;
 };
 
 module.exports = {

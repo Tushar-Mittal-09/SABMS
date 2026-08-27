@@ -53,6 +53,16 @@ class AuthRepository {
   // ─── User Persistence Operations (MongoDB) ───────────────────────────
 
   /**
+   * Look up user by MongoDB ObjectId (safe lookup without password hash).
+   * @param {string|import('mongoose').Types.ObjectId} id
+   * @returns {Promise<import('mongoose').Document|null>}
+   */
+  async findById(id) {
+    if (!id) return null;
+    return this._userRepository.findById(id);
+  }
+
+  /**
    * Look up user by email address (without password hash).
    * @param {string} email
    * @returns {Promise<import('mongoose').Document|null>}

@@ -102,15 +102,16 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 - **Complexity**: Minimum 1 uppercase (`[A-Z]`), 1 lowercase (`[a-z]`), 1 number (`[0-9]`), 1 special character (`[@$!%*?&#^~_-]`).
 - **Isolation Boundary**: Hashing and verification reside exclusively in [`server/src/services/password.service.js`](file:///d:/SABMS/server/src/services/password.service.js).
 
-### 5.3 Login Credential Verification & JWT Access Token Policy (Sprint 2.7 & Sprint 2.8)
+### 5.3 Login Credential Verification & JWT Token Policy (Sprint 2.7, Sprint 2.8 & Sprint 2.9)
 
 - **Constant-Time Verification**: Password verification is executed using Argon2 native bindings to protect against side-channel timing attacks.
 - **Anti-Account Enumeration**: Generic `401 Unauthorized` with client message `"Invalid email or password."` is returned identically for nonexistent accounts and incorrect password candidates.
 - **Account State Verification**: Authentication validates that the user account is verified (`isEmailVerified === true`) and not deactivated/suspended (`status !== 'SUSPENDED'` and `status !== 'INACTIVE'`).
 - **Access Token Issuance (Sprint 2.8)**: Upon successful credential and account validation, backend issues a cryptographically signed HMAC-SHA256 JWT access token with 15-minute TTL, signed with `JWT_ACCESS_SECRET`, containing only minimal non-sensitive registered claims (`sub`, `role`, `iat`, `exp`, `iss`, `aud`).
+- **Refresh Token & Cookie Issuance (Sprint 2.9)**: Backend issues a long-lived JWT refresh token with 7-day TTL signed with dedicated `JWT_REFRESH_SECRET`, containing minimal claims (`sub`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`), delivered exclusively via an `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth/refresh` cookie (with `Secure` in production). Refresh tokens are NEVER exposed to client JavaScript or returned in JSON responses.
 - **Sprint Boundaries**:
   - Access Tokens (JWT): Sprint 2.8 `[IMPLEMENTED]`.
-  - Refresh Tokens & Cookie: Sprint 2.9 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - Refresh Tokens & HttpOnly Cookie: Sprint 2.9 `[IMPLEMENTED]`.
   - Token Rotation & Theft Detection: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
   - Logout & Session Invalidation: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
 

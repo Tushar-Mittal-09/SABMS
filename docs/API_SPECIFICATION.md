@@ -315,12 +315,12 @@
   }
   ```
 
-#### `POST /api/v1/auth/login` `[CANONICAL - SPRINT 2.7 & SPRINT 2.8]`
+#### `POST /api/v1/auth/login` `[CANONICAL - SPRINT 2.7, SPRINT 2.8 & SPRINT 2.9]`
 
-- **Description**: Authenticates user credentials (email & password) using Argon2id constant-time verification, validates account state (active & verified), updates `lastLoginAt`, and returns sanitized user profile along with a cryptographically signed short-lived JWT Access Token.
+- **Description**: Authenticates user credentials (email & password) using Argon2id constant-time verification, validates account state (active & verified), updates `lastLoginAt`, and returns sanitized user profile along with a cryptographically signed short-lived JWT Access Token in the response body, and sets a long-lived cryptographically signed JWT Refresh Token in a secure HttpOnly cookie.
 - **Sprint Boundaries**:
   - **Access Token (JWT)**: Sprint 2.8 `[IMPLEMENTED]` (Short-lived, ~15m, signed with HMAC-SHA256, contains `sub`, `role`, `iat`, `exp`, `iss`, `aud`).
-  - **Refresh Tokens & HttpOnly Cookie**: Sprint 2.9 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - **Refresh Tokens & HttpOnly Cookie**: Sprint 2.9 `[IMPLEMENTED]` (Long-lived, ~7d, signed with dedicated `JWT_REFRESH_SECRET`, contains `sub`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`, delivered via `HttpOnly`, `SameSite=Strict`, scoped `Path=/api/v1/auth/refresh`).
   - **Single-Use Token Rotation & Theft Detection**: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
   - **Logout & Session Invalidation**: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
 - **Access**: Public
@@ -330,6 +330,10 @@
     "email": "jane.doe@university.edu",
     "password": "SecurePassword123!"
   }
+  ```
+- **Response Headers**:
+  ```http
+  Set-Cookie: refreshToken=<JWT_REFRESH_TOKEN>; Path=/api/v1/auth/refresh; HttpOnly; SameSite=Strict; Max-Age=604800; Secure
   ```
 - **Success Response (`200 OK`)**:
   ```json
@@ -369,17 +373,47 @@
   }
   ```
 
-#### `POST /api/v1/auth/refresh`
+#### `POST /api/v1/auth/refresh` `[CANONICAL - SPRINT 2.9]`
 
-- **Description**: Rotates refresh token cookie and issues a fresh Access Token.
-- **Access**: Public (Requires valid `refreshToken` cookie)
+- **Description**: Validates the refresh token received strictly from the `HttpOnly` cookie (`refreshToken`), validates user account state (active & verified), and issues a fresh Access Token in the response body.
+- **Sprint Boundaries**:
+  - **Refresh Token Validation & Access Token Issuance**: Sprint 2.9 `[IMPLEMENTED]`.
+  - **Single-Use Token Rotation & Re-issuing Refresh Token**: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`. Refresh token is NOT rotated in Sprint 2.9.
+- **Access**: Public (Requires valid `refreshToken` HttpOnly cookie)
+- **Request Body**: None (Tokens in request body, query parameters, or Authorization headers are strictly ignored/rejected).
 - **Success Response (`200 OK`)**:
   ```json
   {
     "success": true,
-    "message": "Token refreshed successfully.",
+    "message": "Access token refreshed successfully.",
     "data": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+      "id": "64a7f8e9c1d2e3f4a5b6c7d8",
+      "name": "Jane Doe",
+      "email": "jane.doe@university.edu",
+      "phone": "+919876543210",
+      "department": "Computer Science",
+      "role": "STUDENT",
+      "status": "ACTIVE",
+      "isEmailVerified": true,
+      "isPhoneVerified": true,
+      "lastLoginAt": "2026-08-15T12:00:00.000Z",
+      "createdAt": "2026-08-15T12:00:00.000Z",
+      "user": {
+        "id": "64a7f8e9c1d2e3f4a5b6c7d8",
+        "name": "Jane Doe",
+        "email": "jane.doe@university.edu",
+        "phone": "+919876543210",
+        "department": "Computer Science",
+        "role": "STUDENT",
+        "status": "ACTIVE",
+        "isEmailVerified": true,
+        "isPhoneVerified": true,
+        "lastLoginAt": "2026-08-15T12:00:00.000Z",
+        "createdAt": "2026-08-15T12:00:00.000Z"
+      },
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "tokenType": "Bearer",
+      "expiresIn": "15m"
     },
     "meta": null
   }

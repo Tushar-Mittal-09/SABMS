@@ -44,6 +44,11 @@ const envSchema = z
       .string()
       .min(16, 'JWT_REFRESH_SECRET must be at least 16 characters long'),
     JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+    JWT_REFRESH_COOKIE_NAME: z.string().default('refreshToken'),
+    JWT_REFRESH_COOKIE_PATH: z.string().default('/api/v1/auth/refresh'),
+    JWT_REFRESH_COOKIE_SAME_SITE: z
+      .enum(['strict', 'lax', 'none'])
+      .default('strict'),
 
     // SMTP Email Placeholders
     SMTP_HOST: z.string().default('smtp.mailtrap.io'),
@@ -158,6 +163,9 @@ const config = Object.freeze({
     audience: parsedEnv.JWT_AUDIENCE,
     refreshSecret: parsedEnv.JWT_REFRESH_SECRET,
     refreshExpiresIn: parsedEnv.JWT_REFRESH_EXPIRES_IN,
+    refreshCookieName: parsedEnv.JWT_REFRESH_COOKIE_NAME,
+    refreshCookiePath: parsedEnv.JWT_REFRESH_COOKIE_PATH,
+    refreshCookieSameSite: parsedEnv.JWT_REFRESH_COOKIE_SAME_SITE,
   }),
   smtp: Object.freeze({
     host: parsedEnv.SMTP_HOST,

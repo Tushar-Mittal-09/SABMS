@@ -591,7 +591,7 @@ describe('JWT Access Token Generation & Security (Sprint 2.8)', () => {
       expect(res.body.data.otpHash).toBeUndefined();
     });
 
-    it('32. should NOT generate refresh token or set refresh cookie in Sprint 2.8', async () => {
+    it('32. should NOT return refreshToken in JSON response body', async () => {
       jest
         .spyOn(authRepository, 'findByEmailWithPasswordHash')
         .mockResolvedValue(mockActiveUser);
@@ -606,13 +606,8 @@ describe('JWT Access Token Generation & Security (Sprint 2.8)', () => {
 
       expect(res.status).toBe(200);
 
-      // Scope Invariants: Sprint 2.8 only implements Access Tokens
+      // Scope Invariants: Refresh token is NEVER returned in JSON response body
       expect(res.body.data.refreshToken).toBeUndefined();
-
-      // No Set-Cookie header for refreshToken
-      const cookies = res.headers['set-cookie'] || [];
-      const hasRefreshCookie = cookies.some((c) => c.includes('refreshToken='));
-      expect(hasRefreshCookie).toBe(false);
     });
 
     it('33. should return 401 Unauthorized for invalid login credentials', async () => {

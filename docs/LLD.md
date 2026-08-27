@@ -204,10 +204,10 @@ class AppError extends Error {
   8. Formats and returns safe domain user entity and token metadata (`formatLoginResponse`).
   9. **Sprint Boundaries**:
      - JWT Access Token: Sprint 2.8 `[IMPLEMENTED]`.
-     - Refresh Tokens & Cookie: Sprint 2.9 `[NOT IMPLEMENTED]`.
-     - Token Rotation: Sprint 2.10 `[NOT IMPLEMENTED]`.
-     - Logout: Sprint 2.11 `[NOT IMPLEMENTED]`.
-- **Sprint Tasks**: Sprint 2.7 (Login) & Sprint 2.8 (JWT Access Token).
+     - Refresh Tokens & HttpOnly Cookie: Sprint 2.9 `[IMPLEMENTED]`.
+     - Token Rotation & Reuse Detection: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+     - Logout & Revocation: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+- **Sprint Tasks**: Sprint 2.7 (Login), Sprint 2.8 (JWT Access Token), & Sprint 2.9 (Refresh Token & Cookie Issuance).
 
 ### SD-04: Forgot Password
 
@@ -230,11 +230,14 @@ class AppError extends Error {
 - **Workflow**: Extracts session context → Deletes session & refresh token family keys from Redis → Adds access token JTI to Redis blocklist → Clears client `HttpOnly` refresh cookie.
 - **Sprint Task**: Sprint 2.11 (Logout).
 
-### SD-07: Refresh Access Token (Single-Use Rotation)
+### SD-07: Refresh Access Token
 
-- **Purpose**: Issue new Access Token using valid Refresh Cookie with single-use rotation and theft detection.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `Redis`.
-- **Workflow**: Reads `refreshToken` cookie → Verifies token in Redis → **If valid**: Rotates refresh token (issues new opaque token + new JWT, updates Redis family state, sets new cookie) → **If reused/stolen**: Immediately revokes entire token family (theft detection).
+- **Purpose**: Issue new Access Token using valid Refresh Cookie.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.helper.js`, `auth.repository.js`.
+- **Workflow (Sprint 2.9)**: Reads `refreshToken` cookie → Verifies signature against `JWT_REFRESH_SECRET`, algorithm, issuer, audience, and type (`refresh`) → Loads User from MongoDB → Validates account eligibility (active & verified) → Generates and returns a fresh JWT Access Token in JSON response (`formatLoginResponse`).
+- **Sprint Boundaries**:
+  - **Refresh Token Validation & Access Token Issuance**: Sprint 2.9 `[IMPLEMENTED]`.
+  - **Single-Use Token Rotation & Reuse Detection**: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`. Refresh token is NOT rotated in Sprint 2.9.
 - **Sprint Task**: Sprint 2.9 & 2.10 (Refresh Token & Single-Use Rotation).
 
 ### SD-08: Change Password

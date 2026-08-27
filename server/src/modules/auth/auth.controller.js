@@ -1,7 +1,11 @@
 'use strict';
 
+const config = require('../../config/env.config');
+const AppError = require('../../core/errors/AppError');
 const catchAsync = require('../../shared/utils/catchAsync');
 const authService = require('./auth.service');
+const { COOKIE_KEYS } = require('./auth.constants');
+const { getRefreshTokenCookieOptions } = require('./auth.helper');
 const {
   formatRegistrationResponse,
   formatVerifyEmailResponse,
@@ -10,14 +14,15 @@ const {
 } = require('./auth.response');
 
 /**
- * Authentication HTTP Controller (Sprint 2.4, Sprint 2.5, Sprint 2.6 & Sprint 2.7).
+ * Authentication HTTP Controller (Sprint 2.4, Sprint 2.5, Sprint 2.6, Sprint 2.7, Sprint 2.8 & Sprint 2.9).
  *
  * Responsibilities:
  * - Extracts request payload from Express request.
  * - Delegates execution to AuthService.
  * - Formats sanitized domain response via auth.response.js.
  * - Dispatches standardized HTTP responses.
- * - Contains NO business logic, NO direct database/Mongoose access, NO Redis operations, and NO OTP generation.
+ * - Issues HttpOnly cookies for long-lived refresh tokens upon successful authentication.
+ * - Contains NO direct database/Mongoose access, NO Redis operations, and NO OTP generation.
  */
 class AuthController {
   /**
@@ -79,18 +84,59 @@ class AuthController {
   });
 
   /**
-   * User Login Endpoint Handler (Sprint 2.7 & Sprint 2.8).
+   * User Login Endpoint Handler (Sprint 2.7, Sprint 2.8 & Sprint 2.9).
    * POST /api/v1/auth/login
    */
   login = catchAsync(async (req, res) => {
     const loginResult = await authService.login(req.body);
     const user = loginResult.user || loginResult;
+
+    // Issue HttpOnly Refresh Token Cookie (Sprint 2.9)
+    if (loginResult.refreshToken) {
+      const cookieName =
+        config.jwt?.refreshCookieName || COOKIE_KEYS.REFRESH_TOKEN;
+      const cookieOptions = getRefreshTokenCookieOptions();
+      res.cookie(cookieName, loginResult.refreshToken, cookieOptions);
+    }
+
     const responseData = formatLoginResponse(user, {
       accessToken: loginResult.accessToken,
       tokenType: loginResult.tokenType || 'Bearer',
       expiresIn: loginResult.expiresIn,
     });
     return res.success(responseData, 'Authentication successful.');
+  });
+
+  /**
+   * Access Token Refresh Endpoint Handler (Sprint 2.9).
+   * POST /api/v1/auth/refresh
+   *
+   * Security Boundaries:
+   * - Reads refresh token strictly from HttpOnly cookie (req.cookies / req.signedCookies).
+   * - Ignores/rejects tokens provided in request body, Authorization headers, or query parameters.
+   * - Never returns the refresh token in JSON response payload.
+   * - Does NOT rotate the refresh token (Sprint 2.10 scope).
+   */
+  refresh = catchAsync(async (req, res) => {
+    const cookieName =
+      config.jwt?.refreshCookieName || COOKIE_KEYS.REFRESH_TOKEN;
+    const refreshToken =
+      req.cookies?.[cookieName] || req.signedCookies?.[cookieName];
+
+    if (!refreshToken) {
+      throw AppError.unauthorized('Refresh token is required');
+    }
+
+    const refreshResult = await authService.refreshAccessToken(refreshToken);
+    const user = refreshResult.user || refreshResult;
+
+    const responseData = formatLoginResponse(user, {
+      accessToken: refreshResult.accessToken,
+      tokenType: refreshResult.tokenType || 'Bearer',
+      expiresIn: refreshResult.expiresIn,
+    });
+
+    return res.success(responseData, 'Access token refreshed successfully.');
   });
 }
 

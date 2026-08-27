@@ -403,6 +403,181 @@ const decodeAccessToken = (token, options = {}) => {
   return jwt.decode(token, { complete: options.complete || false });
 };
 
+// ─── JWT Refresh Token Helpers (Sprint 2.9) ──────────────────────────
+
+/**
+ * Generates a long-lived, cryptographically signed JWT refresh token for an authenticated user.
+ *
+ * Security Invariants:
+ * - Contains ONLY minimal safe claims (sub, type: 'refresh', iat, exp, iss, aud).
+ * - Never includes passwords, password hashes, OTPs, OTP hashes, Redis keys, or secrets.
+ * - Algorithm is strictly pinned to configured HMAC algorithm (default: HS256).
+ * - Signed with dedicated refresh secret (JWT_REFRESH_SECRET), completely distinct from access secret.
+ *
+ * @param {Object|import('mongoose').Document|string} user - Authenticated user entity or object with id/sub.
+ * @param {Object} [options={}] - Custom overrides for testing/configuration.
+ * @param {string} [options.secret] - Optional secret override.
+ * @param {string} [options.expiresIn] - Optional expiration override.
+ * @param {string} [options.issuer] - Optional issuer override.
+ * @param {string} [options.audience] - Optional audience override.
+ * @param {string} [options.algorithm] - Optional algorithm override.
+ * @returns {string} Signed JWT refresh token.
+ */
+const generateRefreshToken = (user, options = {}) => {
+  if (!user) {
+    throw new Error('User entity is required to generate a refresh token');
+  }
+
+  const rawUser = typeof user.toObject === 'function' ? user.toObject() : user;
+  const userId = rawUser._id
+    ? rawUser._id.toString()
+    : rawUser.id || rawUser.sub || (typeof user === 'string' ? user : null);
+
+  if (!userId) {
+    throw new Error('User ID (sub) is required to generate a refresh token');
+  }
+
+  const payload = {
+    sub: String(userId),
+    type: JWT_POLICY.REFRESH_TOKEN_PURPOSE || 'refresh',
+  };
+
+  const secret = options.secret || config.jwt?.refreshSecret;
+
+  if (!secret) {
+    throw new Error('JWT refresh secret is required for signing');
+  }
+
+  const signOptions = {
+    algorithm: options.algorithm || JWT_POLICY.ALGORITHM,
+    expiresIn:
+      options.expiresIn ||
+      config.jwt?.refreshExpiresIn ||
+      JWT_POLICY.DEFAULT_REFRESH_EXPIRES_IN,
+    issuer:
+      options.issuer !== undefined
+        ? options.issuer
+        : config.jwt?.issuer || JWT_POLICY.DEFAULT_ISSUER,
+    audience:
+      options.audience !== undefined
+        ? options.audience
+        : config.jwt?.audience || JWT_POLICY.DEFAULT_AUDIENCE,
+  };
+
+  return jwt.sign(payload, secret, signOptions);
+};
+
+/**
+ * Verifies and decodes a JWT refresh token against cryptographic signature, algorithm, issuer, audience, and token type.
+ *
+ * Security Invariants:
+ * - Enforces separate JWT_REFRESH_SECRET.
+ * - Enforces token purpose/type claim ('refresh') to eliminate token-type confusion attacks.
+ * - Rejects expired, tampered, or malformed tokens.
+ *
+ * @param {string} token - Raw JWT refresh token string.
+ * @param {Object} [options={}] - Verification options.
+ * @param {string} [options.secret] - Secret key override.
+ * @param {string[]} [options.algorithms] - Approved algorithms list (defaults to pinned HS256).
+ * @param {string|boolean} [options.issuer] - Expected issuer.
+ * @param {string|boolean} [options.audience] - Expected audience.
+ * @param {boolean} [options.ignoreExpiration=false] - If true, ignores expiration check.
+ * @returns {Object} Decoded token payload.
+ */
+const verifyRefreshToken = (token, options = {}) => {
+  if (!token || typeof token !== 'string') {
+    throw new Error('Refresh token string is required for verification');
+  }
+
+  const secret = options.secret || config.jwt?.refreshSecret;
+
+  if (!secret) {
+    throw new Error('JWT refresh secret is required for verification');
+  }
+
+  const verifyOptions = {
+    algorithms: options.algorithms || [JWT_POLICY.ALGORITHM],
+    ...(options.ignoreExpiration ? { ignoreExpiration: true } : {}),
+  };
+
+  if (options.issuer !== undefined) {
+    if (options.issuer !== false) {
+      verifyOptions.issuer = options.issuer;
+    }
+  } else if (config.jwt?.issuer || JWT_POLICY.DEFAULT_ISSUER) {
+    verifyOptions.issuer = config.jwt?.issuer || JWT_POLICY.DEFAULT_ISSUER;
+  }
+
+  if (options.audience !== undefined) {
+    if (options.audience !== false) {
+      verifyOptions.audience = options.audience;
+    }
+  } else if (config.jwt?.audience || JWT_POLICY.DEFAULT_AUDIENCE) {
+    verifyOptions.audience =
+      config.jwt?.audience || JWT_POLICY.DEFAULT_AUDIENCE;
+  }
+
+  const decoded = jwt.verify(token, secret, verifyOptions);
+
+  const expectedType = JWT_POLICY.REFRESH_TOKEN_PURPOSE || 'refresh';
+  if (decoded.type !== expectedType) {
+    const error = new Error('Invalid token type. Expected refresh token.');
+    error.name = 'JsonWebTokenError';
+    throw error;
+  }
+
+  return decoded;
+};
+
+/**
+ * Decodes a JWT refresh token without verification.
+ *
+ * @param {string} token - Raw JWT string.
+ * @param {Object} [options={}] - Options (e.g. { complete: true }).
+ * @returns {Object|null} Decoded payload or token object.
+ */
+const decodeRefreshToken = (token, options = {}) => {
+  if (!token || typeof token !== 'string') return null;
+  return jwt.decode(token, { complete: options.complete || false });
+};
+
+/**
+ * Generates secure Express cookie options for HttpOnly Refresh Token issuance.
+ *
+ * Security Invariants:
+ * - httpOnly is strictly true (never exposed to client-side JS / document.cookie).
+ * - secure is true in production environment (HTTPS only).
+ * - sameSite is strict (or configured) to defend against cross-site request forgery.
+ * - path is strictly scoped to the refresh endpoint.
+ * - maxAge is configured to matching refresh token lifetime.
+ *
+ * @param {Object} [options={}] - Custom overrides.
+ * @returns {import('express').CookieOptions}
+ */
+const getRefreshTokenCookieOptions = (options = {}) => {
+  const isProduction =
+    options.secure !== undefined ? options.secure : config.isProduction;
+
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite:
+      options.sameSite ||
+      config.jwt?.refreshCookieSameSite ||
+      JWT_POLICY.REFRESH_COOKIE_SAME_SITE ||
+      'strict',
+    path:
+      options.path ||
+      config.jwt?.refreshCookiePath ||
+      JWT_POLICY.REFRESH_COOKIE_PATH ||
+      '/api/v1/auth/refresh',
+    maxAge:
+      options.maxAge !== undefined
+        ? options.maxAge
+        : JWT_POLICY.REFRESH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000,
+  };
+};
+
 module.exports = {
   extractClientIp,
   extractUserAgent,
@@ -426,4 +601,8 @@ module.exports = {
   generateAccessToken,
   verifyAccessToken,
   decodeAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  decodeRefreshToken,
+  getRefreshTokenCookieOptions,
 };

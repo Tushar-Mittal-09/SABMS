@@ -51,23 +51,24 @@
 - [x] `TC-AUTH-016`: Phone OTP resend enforces 60s cooldown and 5 maximum resends (Sprint 2.6).
 - [x] `TC-AUTH-017`: Phone verification preserves existing email verification and account status (Sprint 2.6).
 
-### 3.3 Login & Session Tests (Sprint 2.7 & Sprint 2.8 Completed)
+### 3.3 Login & Session Tests (Sprint 2.7, Sprint 2.8 & Sprint 2.9 Completed)
 
 - [x] `TC-AUTH-020a`: Login with valid verified credentials returns `200 OK` with valid signed JWT Access Token (`auth.access-token.test.js`) (Sprint 2.8).
 - [x] `TC-AUTH-020b`: JWT Access Token contains valid claims (`sub`, `role`, `iat`, `exp`, `iss`, `aud`) and strictly excludes sensitive fields (`auth.access-token.test.js`) (Sprint 2.8).
 - [x] `TC-AUTH-020c`: Access token verification enforces HS256 algorithm, secret integrity, issuer, and audience matching (`auth.access-token.test.js`) (Sprint 2.8).
-- [ ] `TC-AUTH-020d`: Login issues HttpOnly refresh token cookie (Sprint 2.9).
+- [x] `TC-AUTH-020d`: Login issues HttpOnly refresh token cookie with Secure, SameSite, and Path scoping (`auth.refresh-token.test.js`) (Sprint 2.9).
 - [x] `TC-AUTH-021`: Login with invalid password returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`) (Sprint 2.7).
 - [x] `TC-AUTH-022`: Login with non-existent email returns `401 Unauthorized` (timing-safe & anti-enumeration) (Sprint 2.7).
 - [ ] `TC-AUTH-023`: 5 consecutive failed logins locks account for 15 minutes (`429 Too Many Requests`) (Sprint 2.17).
 - [x] `TC-AUTH-024`: Login on unverified account returns `403 Forbidden` (`AUTH_ACCOUNT_UNVERIFIED`) (Sprint 2.7).
 
-### 3.4 Token Lifecycle & Single-Use Rotation Tests (Sprint 2.9, 2.10, 2.11)
+### 3.4 Token Lifecycle & Refresh Tests (Sprint 2.9, 2.10, 2.11)
 
-- [ ] `TC-AUTH-030`: Call `/refresh` with valid refresh cookie returns new JWT access token and rotated refresh cookie.
-- [ ] `TC-AUTH-031`: Call `/refresh` with revoked/invalid cookie returns `401 Unauthorized`.
-- [ ] `TC-AUTH-032`: **Theft Detection Test**: Presenting an already-consumed refresh token invalidates all user sessions.
-- [ ] `TC-AUTH-033`: Call `/logout` clears refresh cookie and adds active access token JTI to Redis blocklist.
+- [x] `TC-AUTH-030a`: Call `/refresh` with valid refresh cookie returns new JWT access token (`auth.refresh-token.test.js`) (Sprint 2.9).
+- [x] `TC-AUTH-030b`: Refresh token generation contains valid claims (`sub`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`) and uses separate secret (`auth.refresh-token.test.js`) (Sprint 2.9).
+- [x] `TC-AUTH-031`: Call `/refresh` with missing, expired, malformed, or tampered cookie returns `401 Unauthorized` (`auth.refresh-token.test.js`) (Sprint 2.9).
+- [ ] `TC-AUTH-032`: **Single-Use Rotation & Theft Detection**: Presenting an already-consumed refresh token invalidates all user sessions (Sprint 2.10).
+- [ ] `TC-AUTH-033`: Call `/logout` clears refresh cookie and adds active access token JTI to Redis blocklist (Sprint 2.11).
 
 ### 3.5 Password Recovery & Security Tests (Sprint 2.12, 2.13, 2.14)
 

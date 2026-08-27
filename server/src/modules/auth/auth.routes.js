@@ -47,6 +47,10 @@ router.post(
 
 router.post('/login', validateBody(loginSchema), authController.login);
 
+// ─── Token Refresh Route (Sprint 2.9) ───────────────────────────────────────
+
+router.post('/refresh', authController.refresh);
+
 // ─── Placeholders for Future Sprints (Preserved) ─────────────────────────────
 
 router.post(
@@ -58,19 +62,6 @@ router.post(
         requestId: req.id,
       },
       'Logged out successfully (placeholder)'
-    );
-  })
-);
-
-router.post(
-  '/refresh',
-  catchAsync(async (req, res) => {
-    return res.success(
-      {
-        token: 'placeholder_new_token',
-        requestId: req.id,
-      },
-      'Token refreshed (placeholder)'
     );
   })
 );

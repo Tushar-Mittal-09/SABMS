@@ -548,9 +548,8 @@ describe('User Registration Workflow (Sprint 2.4)', () => {
       );
     });
 
-    it('28. should preserve placeholder endpoints for logout and refresh without regression', async () => {
+    it('28. should preserve placeholder endpoint for logout without regression', async () => {
       await request(app).post('/api/v1/auth/logout').expect(200);
-      await request(app).post('/api/v1/auth/refresh').expect(200);
     });
   });
 });

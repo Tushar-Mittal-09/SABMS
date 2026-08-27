@@ -102,6 +102,13 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 - **Complexity**: Minimum 1 uppercase (`[A-Z]`), 1 lowercase (`[a-z]`), 1 number (`[0-9]`), 1 special character (`[@$!%*?&#^~_-]`).
 - **Isolation Boundary**: Hashing and verification reside exclusively in [`server/src/services/password.service.js`](file:///d:/SABMS/server/src/services/password.service.js).
 
+### 5.3 Login Credential Verification & Anti-Enumeration Policy (Sprint 2.7)
+
+- **Constant-Time Verification**: Password verification is executed using Argon2 native bindings to protect against side-channel timing attacks.
+- **Anti-Account Enumeration**: Generic `401 Unauthorized` with client message `"Invalid email or password."` is returned identically for nonexistent accounts and incorrect password candidates.
+- **Account State Verification**: Authentication validates that the user account is verified (`isEmailVerified === true`) and not deactivated/suspended (`status !== 'SUSPENDED'` and `status !== 'INACTIVE'`).
+- **Zero Token Leakage**: No JWT tokens, session IDs, passwords, or password hashes are emitted during Sprint 2.7 authentication. Token issuance is deferred to Sprint 2.8+.
+
 ---
 
 ## 6. Rate Limiting & Account Lockout Strategy

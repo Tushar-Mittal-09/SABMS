@@ -11,12 +11,13 @@ const {
   resendEmailOtpSchema,
   verifyPhoneSchema,
   resendPhoneOtpSchema,
+  loginSchema,
 } = require('./auth.schema');
 const authController = require('./auth.controller');
 
 const router = express.Router();
 
-// ─── Registration & Email/Phone Verification Routes (Sprint 2.4, 2.5 & 2.6) ───
+// ─── Registration, Email/Phone Verification & Login Routes (Sprint 2.4 - 2.7) ───
 
 router.post('/register', validateBody(registerSchema), authController.register);
 
@@ -44,21 +45,9 @@ router.post(
   authController.resendPhoneOtp
 );
 
-// ─── Placeholders for Future Sprints (Preserved) ─────────────────────────────
+router.post('/login', validateBody(loginSchema), authController.login);
 
-router.post(
-  '/login',
-  catchAsync(async (req, res) => {
-    return res.success(
-      {
-        token: 'placeholder_token',
-        requestId: req.id,
-        apiVersion: req.apiVersion,
-      },
-      'Login successful (placeholder)'
-    );
-  })
-);
+// ─── Placeholders for Future Sprints (Preserved) ─────────────────────────────
 
 router.post(
   '/logout',

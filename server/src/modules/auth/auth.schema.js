@@ -104,10 +104,31 @@ const resendPhoneOtpSchema = z
   })
   .strict();
 
+/**
+ * User Login Validation Contract (Sprint 2.7).
+ *
+ * Accepted fields:
+ * - email: valid email (trimmed, lowercased, required)
+ * - password: non-empty string (required, never trimmed/mutated)
+ *
+ * Security Boundary:
+ * - Strict schema (.strict()) rejects unknown fields, role injections,
+ *   and privilege escalation attempts.
+ */
+const loginSchema = z
+  .object({
+    email: email({ required: true }),
+    password: z
+      .string({ required_error: 'Password is required' })
+      .min(1, 'Password is required'),
+  })
+  .strict();
+
 module.exports = {
   registerSchema,
   verifyEmailSchema,
   resendEmailOtpSchema,
   verifyPhoneSchema,
   resendPhoneOtpSchema,
+  loginSchema,
 };

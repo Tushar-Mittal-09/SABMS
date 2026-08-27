@@ -53,11 +53,11 @@
 
 ### 3.3 Login & Session Tests (Sprint 2.7, 2.8, 2.9)
 
-- [ ] `TC-AUTH-020`: Login with valid verified credentials returns `200 OK`, JWT in body, and `HttpOnly` refresh cookie.
-- [ ] `TC-AUTH-021`: Login with invalid password returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`).
-- [ ] `TC-AUTH-022`: Login with non-existent email returns `401 Unauthorized` (timing-safe).
-- [ ] `TC-AUTH-023`: 5 consecutive failed logins locks account for 15 minutes (`429 Too Many Requests`).
-- [ ] `TC-AUTH-024`: Login on unverified account returns `403 Forbidden` (`AUTH_ACCOUNT_UNVERIFIED`).
+- [ ] `TC-AUTH-020`: Login with valid verified credentials returns `200 OK`, JWT in body, and `HttpOnly` refresh cookie (Sprint 2.8 & 2.9).
+- [x] `TC-AUTH-021`: Login with invalid password returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`) (Sprint 2.7).
+- [x] `TC-AUTH-022`: Login with non-existent email returns `401 Unauthorized` (timing-safe & anti-enumeration) (Sprint 2.7).
+- [ ] `TC-AUTH-023`: 5 consecutive failed logins locks account for 15 minutes (`429 Too Many Requests`) (Sprint 2.17).
+- [x] `TC-AUTH-024`: Login on unverified account returns `403 Forbidden` (`AUTH_ACCOUNT_UNVERIFIED`) (Sprint 2.7).
 
 ### 3.4 Token Lifecycle & Single-Use Rotation Tests (Sprint 2.9, 2.10, 2.11)
 

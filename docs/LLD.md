@@ -191,9 +191,17 @@ class AppError extends Error {
 
 ### SD-03: User Login
 
-- **Purpose**: Authenticate user credentials and establish a secure session.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `user.model.js`, `Redis`.
-- **Workflow**: Validates credentials → Checks account lockout in Redis → Verifies password hash via constant-time comparison → Checks verification status → Generates Access Token (JWT ~15 min) & Refresh Token (64-byte opaque ~7d) → Stores session in Redis → Returns Access Token in body and sets `HttpOnly` Refresh Cookie.
+- **Purpose**: Authenticate user credentials securely, enforce verification and active status invariants, and update login activity timestamp.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `user.model.js`.
+- **Workflow**:
+  1. Validates input schema via strict Zod `loginSchema` (email normalized, password unmutated).
+  2. Queries user record including `passwordHash` via `authRepository.findByEmailWithPasswordHash()`.
+  3. Verifies credentials against Argon2id hash using constant-time comparison (`password.service.js`).
+  4. Returns generic `401 Unauthorized` for both missing user and wrong password to prevent account enumeration.
+  5. Enforces account state constraints: rejects `SUSPENDED`/`INACTIVE` accounts with `403 Forbidden` (`AUTH_ACCOUNT_DISABLED`), and unverified accounts with `403 Forbidden` (`AUTH_ACCOUNT_UNVERIFIED`).
+  6. Updates `lastLoginAt` in MongoDB via `authRepository.updateLastLogin()`.
+  7. Formats and returns safe domain user entity (`formatLoginResponse`).
+  8. **Token Boundary Note**: JWT Access Token issuance and Refresh Cookie session lifecycle are integrated in Sprints 2.8, 2.9 & 2.10.
 - **Sprint Task**: Sprint 2.7 (Login).
 
 ### SD-04: Forgot Password

@@ -6,10 +6,11 @@ const {
   formatRegistrationResponse,
   formatVerifyEmailResponse,
   formatVerifyPhoneResponse,
+  formatLoginResponse,
 } = require('./auth.response');
 
 /**
- * Authentication HTTP Controller (Sprint 2.4, Sprint 2.5 & Sprint 2.6).
+ * Authentication HTTP Controller (Sprint 2.4, Sprint 2.5, Sprint 2.6 & Sprint 2.7).
  *
  * Responsibilities:
  * - Extracts request payload from Express request.
@@ -75,6 +76,16 @@ class AuthController {
       { phone: result.phone },
       'Verification code sent successfully'
     );
+  });
+
+  /**
+   * User Login Endpoint Handler (Sprint 2.7).
+   * POST /api/v1/auth/login
+   */
+  login = catchAsync(async (req, res) => {
+    const user = await authService.login(req.body);
+    const responseData = formatLoginResponse(user);
+    return res.success(responseData, 'Authentication successful.');
   });
 }
 

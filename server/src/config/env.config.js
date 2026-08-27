@@ -58,6 +58,10 @@ const envSchema = z.object({
   SMS_API_KEY: z.string().optional(),
   SMS_API_SECRET: z.string().optional(),
   SMS_FROM: z.string().default('SABMS'),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_PHONE_NUMBER: z.string().optional(),
+  TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
 
   // Cloudinary Placeholders
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -148,6 +152,10 @@ const config = Object.freeze({
     apiKey: parsedEnv.SMS_API_KEY,
     apiSecret: parsedEnv.SMS_API_SECRET,
     from: parsedEnv.SMS_FROM,
+    twilioAccountSid: parsedEnv.TWILIO_ACCOUNT_SID,
+    twilioAuthToken: parsedEnv.TWILIO_AUTH_TOKEN,
+    twilioPhoneNumber: parsedEnv.TWILIO_PHONE_NUMBER,
+    twilioMessagingServiceSid: parsedEnv.TWILIO_MESSAGING_SERVICE_SID,
   }),
   cloudinary: Object.freeze({
     cloudName: parsedEnv.CLOUDINARY_CLOUD_NAME,

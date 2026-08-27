@@ -46,7 +46,27 @@ export const VerifyPhone = () => {
   const [verificationSuccess, setVerificationSuccess] = useState(null);
 
   // 60s cooldown timer
-  const [cooldownRemaining, setCooldownRemaining] = useState(60);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
+  // Automatically request initial Phone OTP on page load if phone is provided
+  useEffect(() => {
+    if (phone && !currentUser?.isPhoneVerified && !verificationSuccess) {
+      authApi
+        .resendPhoneOtp({ phone })
+        .then(() => {
+          setAlertSuccess(
+            'A 6-digit verification code has been dispatched via SMS.'
+          );
+          setCooldownRemaining(60);
+        })
+        .catch((err) => {
+          const match = err.message?.match(/wait\s+(\d+)\s+seconds/i);
+          if (match && match[1]) {
+            setCooldownRemaining(parseInt(match[1], 10));
+          }
+        });
+    }
+  }, [phone]);
 
   useEffect(() => {
     if (cooldownRemaining <= 0) return;

@@ -2,7 +2,10 @@
 
 const userRepository = require('../users/user.repository');
 const authRepository = require('./auth.repository');
-const { hashPassword } = require('../../services/password.service');
+const {
+  hashPassword,
+  verifyPassword,
+} = require('../../services/password.service');
 const emailService = require('../../services/email.service');
 const smsService = require('../../services/sms.service');
 const { USER_ROLES, ACCOUNT_STATUSES } = require('../../shared/constants');
@@ -108,33 +111,56 @@ class AuthService {
     };
 
     // 5. Persist via User Repository with database duplicate key safety
+    let createdUser;
     try {
-      return await this._userRepository.create(userPayload);
+      createdUser = await this._userRepository.create(userPayload);
     } catch (err) {
       if (err.code === 11000) {
         throw AppError.conflict('An account with this email already exists');
       }
       throw err;
     }
+
+    // 6. Automatically dispatch initial email verification OTP
+    try {
+      await this.sendEmailVerificationOtp(createdUser);
+    } catch (otpErr) {
+      logger.warn(
+        `Failed to automatically dispatch initial email verification OTP: ${otpErr.message}`,
+        {
+          context: 'AuthService',
+          recipient: normalizedEmail,
+        }
+      );
+    }
+
+    return createdUser;
   }
 
   /**
    * Generates and dispatches an Email Verification OTP.
    *
-   * @param {string} email - Target user email address.
+   * @param {string|Object} emailOrUser - Target user email address or persisted user object.
    * @returns {Promise<{ email: string, message: string }>} Sanitized success result.
    */
-  async sendEmailVerificationOtp(email) {
-    // 1. Normalize email
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) {
-      throw AppError.badRequest('Valid email address is required');
-    }
+  async sendEmailVerificationOtp(emailOrUser) {
+    let user;
+    let normalizedEmail;
 
-    // 2. Find user
-    const user = await this._authRepository.findByEmail(normalizedEmail);
-    if (!user) {
-      throw AppError.notFound('No account found with this email address');
+    if (typeof emailOrUser === 'object' && emailOrUser !== null) {
+      user = emailOrUser;
+      normalizedEmail = normalizeEmail(user.email);
+    } else {
+      normalizedEmail = normalizeEmail(emailOrUser);
+      if (!normalizedEmail) {
+        throw AppError.badRequest('Valid email address is required');
+      }
+
+      // 2. Find user
+      user = await this._authRepository.findByEmail(normalizedEmail);
+      if (!user) {
+        throw AppError.notFound('No account found with this email address');
+      }
     }
 
     // 3. Check if already verified
@@ -319,6 +345,18 @@ class AuthService {
       throw AppError.internal('Failed to update user verification status');
     }
 
+    // Automatically trigger initial Phone OTP if user registered a phone number
+    if (updatedUser.phone && !updatedUser.isPhoneVerified) {
+      try {
+        await this.sendPhoneVerificationOtp(updatedUser);
+      } catch (phoneErr) {
+        logger.warn(
+          `Failed to automatically dispatch initial phone OTP for ${updatedUser.phone}: ${phoneErr.message}`,
+          { context: 'AuthService' }
+        );
+      }
+    }
+
     // 8. Invalidate Redis OTP & resend state to prevent replay attacks
     try {
       await this._authRepository.clearAllOtpState(normalizedEmail);
@@ -354,20 +392,27 @@ class AuthService {
   /**
    * Generates and dispatches a Phone Verification OTP via SMS.
    *
-   * @param {string} phone - Target user phone number in E.164 format.
+   * @param {string|Object} phoneOrUser - Target user phone number in E.164 format or user object.
    * @returns {Promise<{ phone: string, message: string }>} Sanitized success result.
    */
-  async sendPhoneVerificationOtp(phone) {
-    // 1. Normalize phone
-    const normalizedPhone = normalizePhone(phone);
-    if (!normalizedPhone) {
-      throw AppError.badRequest('Valid phone number is required');
-    }
+  async sendPhoneVerificationOtp(phoneOrUser) {
+    let user;
+    let normalizedPhone;
 
-    // 2. Find user by phone
-    const user = await this._authRepository.findByPhone(normalizedPhone);
-    if (!user) {
-      throw AppError.notFound('No account found with this phone number');
+    if (typeof phoneOrUser === 'object' && phoneOrUser !== null) {
+      user = phoneOrUser;
+      normalizedPhone = normalizePhone(user.phone);
+    } else {
+      normalizedPhone = normalizePhone(phoneOrUser);
+      if (!normalizedPhone) {
+        throw AppError.badRequest('Valid phone number is required');
+      }
+
+      // 2. Find user by phone
+      user = await this._authRepository.findByPhone(normalizedPhone);
+      if (!user) {
+        throw AppError.notFound('No account found with this phone number');
+      }
     }
 
     // 3. Check if phone is already verified
@@ -580,6 +625,86 @@ class AuthService {
    */
   async resendPhoneVerificationOtp(phone) {
     return this.sendPhoneVerificationOtp(phone);
+  }
+
+  // ─── User Login Workflow (Sprint 2.7) ────────────────────────────────
+
+  /**
+   * Authenticates user credentials and returns the validated user entity (Sprint 2.7).
+   *
+   * Workflow:
+   * 1. Normalize email address.
+   * 2. Query user entity including password hash.
+   * 3. Validate existence & credentials using constant-time verification.
+   *    (Generic error message prevents account enumeration).
+   * 4. Enforce account status and verification constraints:
+   *    - SUSPENDED / INACTIVE -> 403 Forbidden ('Your account has been deactivated. Please contact support.')
+   *    - Unverified (isEmailVerified === false or status === PENDING) -> 403 Forbidden ('Account not verified. Please verify your email with the OTP code.')
+   * 5. Record successful login timestamp (lastLoginAt).
+   * 6. Return persisted user entity.
+   *
+   * @param {Object} credentials - Validated login input.
+   * @param {string} credentials.email - User email.
+   * @param {string} credentials.password - Raw plaintext password candidate.
+   * @returns {Promise<import('mongoose').Document>} Authenticated user document.
+   * @throws {AppError} 401 Unauthorized on invalid credentials, 403 Forbidden on disabled/unverified account.
+   */
+  async login({ email, password }) {
+    // 1. Normalize email address
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail || !password || typeof password !== 'string') {
+      throw AppError.unauthorized('Invalid email or password.');
+    }
+
+    // 2. Look up user by email explicitly including passwordHash
+    const user =
+      await this._authRepository.findByEmailWithPasswordHash(normalizedEmail);
+
+    // 3. Prevent account enumeration: if user does not exist, return generic 401
+    if (!user || !user.passwordHash) {
+      throw AppError.unauthorized('Invalid email or password.');
+    }
+
+    // 4. Verify password against stored Argon2id hash (constant-time)
+    const isPasswordValid = await verifyPassword(password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw AppError.unauthorized('Invalid email or password.');
+    }
+
+    // 5. Account state rules:
+    // a. Check if account has been suspended or deactivated by an administrator
+    if (
+      user.status === ACCOUNT_STATUSES.SUSPENDED ||
+      user.status === ACCOUNT_STATUSES.INACTIVE
+    ) {
+      throw AppError.forbidden(
+        'Your account has been deactivated. Please contact support.'
+      );
+    }
+
+    // b. Check if email verification is completed
+    if (!user.isEmailVerified || user.status === ACCOUNT_STATUSES.PENDING) {
+      throw AppError.forbidden(
+        'Account not verified. Please verify your email with the OTP code.'
+      );
+    }
+
+    // 6. Record last login timestamp in MongoDB
+    const userId = user._id || user.id;
+    const updatedUser = await this._authRepository.updateLastLogin(
+      userId,
+      new Date()
+    );
+
+    const resultUser = updatedUser || user;
+
+    logger.info(`User logged in successfully: ${normalizedEmail}`, {
+      context: 'AuthService',
+      userId: resultUser._id ? resultUser._id.toString() : resultUser.id,
+      role: resultUser.role,
+    });
+
+    return resultUser;
   }
 }
 

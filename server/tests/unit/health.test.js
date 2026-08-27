@@ -107,7 +107,7 @@ describe('System Health Probes & Infrastructure Smoke Tests', () => {
   describe('NoSQL Injection Sanitization', () => {
     it('should safely sanitize request bodies without crashing Express 5', async () => {
       const res = await request(app)
-        .post('/api/v1/auth/login')
+        .post('/api/v1/auth/logout')
         .send({
           email: { $gt: '' },
           password: 'password123',

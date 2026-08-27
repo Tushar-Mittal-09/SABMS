@@ -17,27 +17,68 @@ const getSmsProvider = () => {
     return customProvider;
   }
 
+  const twilioSid =
+    config.sms.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID;
+  const twilioAuth =
+    config.sms.twilioAuthToken || process.env.TWILIO_AUTH_TOKEN;
+  const twilioServiceSid =
+    config.sms.twilioMessagingServiceSid ||
+    process.env.TWILIO_MESSAGING_SERVICE_SID;
+  const twilioFrom =
+    config.sms.twilioPhoneNumber ||
+    config.sms.from ||
+    process.env.TWILIO_PHONE_NUMBER;
+
+  if (twilioSid && twilioAuth && (twilioFrom || twilioServiceSid)) {
+    return {
+      send: async ({ to, message }) => {
+        const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+        const payload = {
+          To: to,
+          Body: message,
+        };
+
+        if (twilioServiceSid) {
+          payload.MessagingServiceSid = twilioServiceSid;
+        } else if (twilioFrom.startsWith('MG')) {
+          payload.MessagingServiceSid = twilioFrom;
+        } else {
+          payload.From = twilioFrom.startsWith('+')
+            ? twilioFrom
+            : `+${twilioFrom}`;
+        }
+
+        const params = new URLSearchParams(payload);
+        const authHeader = `Basic ${Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64')}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: authHeader,
+          },
+          body: params.toString(),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            data.message || `Twilio SMS error (${response.status})`
+          );
+        }
+
+        return { success: true, messageId: data.sid };
+      },
+    };
+  }
+
   return {
     /**
-     * Default SMS transport implementation.
-     * @param {Object} options
-     * @param {string} options.to - Recipient phone number in E.164 format.
-     * @param {string} options.message - Text message content.
-     * @returns {Promise<{ success: boolean, messageId: string }>}
+     * Fallback when no real SMS provider is configured.
      */
-    send: async ({ to, message: _message }) => {
-      // In development or test environments, simulate successful delivery
-      const messageId = `sms_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      if (config.isDevelopment) {
-        // In development, log delivery dispatch without exposing OTP secrets
-        logger.debug(
-          `[SMS Provider] Dispatching SMS to ${to} (MessageId: ${messageId})`,
-          {
-            context: 'SmsService',
-          }
-        );
-      }
-      return { success: true, messageId };
+    send: async () => {
+      throw new Error(
+        'SMS service is not configured. Please configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in .env to dispatch real SMS messages.'
+      );
     },
   };
 };

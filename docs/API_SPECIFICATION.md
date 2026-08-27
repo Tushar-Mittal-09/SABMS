@@ -315,9 +315,9 @@
   }
   ```
 
-#### `POST /api/v1/auth/login`
+#### `POST /api/v1/auth/login` `[CANONICAL - SPRINT 2.7]`
 
-- **Description**: Authenticates user credentials and issues Access Token (JWT) + `HttpOnly` Refresh Cookie.
+- **Description**: Authenticates user credentials (email & password) using Argon2id constant-time verification, validates account state (active & verified), updates `lastLoginAt`, and returns sanitized user profile. Token issuance (JWT Access Token & HttpOnly Refresh Cookie) is integrated in Sprint 2.8+.
 - **Access**: Public
 - **Request Body**:
   ```json
@@ -326,23 +326,23 @@
     "password": "SecurePassword123!"
   }
   ```
-- **Response Headers**:
-  ```http
-  Set-Cookie: refreshToken=d8f7e6a5b4c3...; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800
-  ```
 - **Success Response (`200 OK`)**:
   ```json
   {
     "success": true,
     "message": "Authentication successful.",
     "data": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
-      "user": {
-        "id": "64a7f8e9c1d2e3f4a5b6c7d8",
-        "name": "Jane Doe",
-        "email": "jane.doe@university.edu",
-        "role": "FACULTY"
-      }
+      "id": "64a7f8e9c1d2e3f4a5b6c7d8",
+      "name": "Jane Doe",
+      "email": "jane.doe@university.edu",
+      "phone": "+919876543210",
+      "department": "Computer Science",
+      "role": "STUDENT",
+      "status": "ACTIVE",
+      "isEmailVerified": true,
+      "isPhoneVerified": true,
+      "lastLoginAt": "2026-08-15T12:00:00.000Z",
+      "createdAt": "2026-08-15T12:00:00.000Z"
     },
     "meta": null
   }

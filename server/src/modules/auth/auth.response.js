@@ -51,8 +51,40 @@ const formatVerifyPhoneResponse = (user) => {
   return formatRegistrationResponse(user);
 };
 
+/**
+ * Formats a sanitized response payload for successful user login (Sprint 2.7).
+ *
+ * Security Invariants:
+ * - Excludes password, passwordHash, and __v
+ * - Excludes session tokens (deferred to Sprint 2.8+)
+ * - Exposes safe user domain profile including lastLoginAt
+ *
+ * @param {Object|import('mongoose').Document} user
+ * @returns {Object|null}
+ */
+const formatLoginResponse = (user) => {
+  if (!user) return null;
+
+  const rawUser = typeof user.toObject === 'function' ? user.toObject() : user;
+
+  return {
+    id: rawUser._id ? rawUser._id.toString() : rawUser.id,
+    name: rawUser.name,
+    email: rawUser.email,
+    phone: rawUser.phone !== undefined ? rawUser.phone : null,
+    department: rawUser.department !== undefined ? rawUser.department : null,
+    role: rawUser.role,
+    status: rawUser.status,
+    isEmailVerified: Boolean(rawUser.isEmailVerified),
+    isPhoneVerified: Boolean(rawUser.isPhoneVerified),
+    lastLoginAt: rawUser.lastLoginAt !== undefined ? rawUser.lastLoginAt : null,
+    createdAt: rawUser.createdAt,
+  };
+};
+
 module.exports = {
   formatRegistrationResponse,
   formatVerifyEmailResponse,
   formatVerifyPhoneResponse,
+  formatLoginResponse,
 };

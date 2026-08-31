@@ -34,12 +34,15 @@ describe('JWT Refresh Token & Cookie Issuance (Sprint 2.9)', () => {
   let mockPendingUser;
   let mockSuspendedUser;
   let mockInactiveUser;
+  let tokenStore;
 
   beforeAll(async () => {
     validPasswordHash = await hashPassword('ValidPass123!');
   });
 
   beforeEach(() => {
+    tokenStore = new Map();
+
     mockActiveUser = new User({
       _id: '64a7f8e9c1d2e3f4a5b6c7d8',
       name: 'Jane Doe',
@@ -89,6 +92,46 @@ describe('JWT Refresh Token & Cookie Issuance (Sprint 2.9)', () => {
       isPhoneVerified: true,
       createdAt: new Date('2026-08-15T12:00:00.000Z'),
     });
+
+    jest
+      .spyOn(authRepository, 'createRefreshToken')
+      .mockImplementation(async (data) => {
+        const doc = {
+          _id: '64a7f8e9c1d2e3f4a5b6c7dc',
+          ...data,
+          toObject: () => data,
+        };
+        tokenStore.set(data.jti, doc);
+        return doc;
+      });
+
+    jest
+      .spyOn(authRepository, 'findRefreshTokenByJti')
+      .mockImplementation(async (jti) => {
+        if (tokenStore.has(jti)) return tokenStore.get(jti);
+        return {
+          _id: '64a7f8e9c1d2e3f4a5b6c7dc',
+          jti,
+          familyId: 'mock-family-id',
+          userId: mockActiveUser._id,
+          status: 'ACTIVE',
+          issuedAt: new Date(),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        };
+      });
+
+    jest
+      .spyOn(authRepository, 'consumeRefreshToken')
+      .mockImplementation(async (jti, familyId, newJti) => {
+        return {
+          _id: '64a7f8e9c1d2e3f4a5b6c7dc',
+          jti,
+          familyId,
+          status: 'CONSUMED',
+          consumedAt: new Date(),
+          replacedByTokenId: newJti,
+        };
+      });
   });
 
   afterEach(() => {
@@ -263,7 +306,22 @@ describe('JWT Refresh Token & Cookie Issuance (Sprint 2.9)', () => {
     it('19-20. should issue a new access token when valid refresh cookie is supplied', async () => {
       jest.spyOn(authRepository, 'findById').mockResolvedValue(mockActiveUser);
 
-      const validRefreshToken = generateRefreshToken(mockActiveUser);
+      const jti = 'valid-test-jti';
+      const familyId = 'valid-test-family';
+      const validRefreshToken = generateRefreshToken(mockActiveUser, {
+        jti,
+        familyId,
+      });
+      tokenStore.set(jti, {
+        _id: '64a7f8e9c1d2e3f4a5b6c7dc',
+        jti,
+        familyId,
+        userId: mockActiveUser._id,
+        status: 'ACTIVE',
+        issuedAt: new Date(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
+
       const cookieName =
         config.jwt.refreshCookieName || JWT_REFRESH_COOKIE_NAME;
 

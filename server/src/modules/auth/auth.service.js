@@ -20,6 +20,8 @@ const {
   PHONE_OTP_RESEND_COOLDOWN_SECONDS,
   PHONE_OTP_MAX_ATTEMPTS,
   PHONE_OTP_MAX_RESENDS,
+  REFRESH_TOKEN_STATUSES,
+  JWT_POLICY,
 } = require('./auth.constants');
 const {
   normalizeEmail,
@@ -33,6 +35,8 @@ const {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
+  generateJti,
+  generateFamilyId,
 } = require('./auth.helper');
 const config = require('../../config/env.config');
 const AppError = require('../../core/errors/AppError');
@@ -631,10 +635,10 @@ class AuthService {
     return this.sendPhoneVerificationOtp(phone);
   }
 
-  // ─── User Login Workflow (Sprint 2.7) ────────────────────────────────
+  // ─── User Login Workflow (Sprint 2.7, Sprint 2.8, Sprint 2.9 & Sprint 2.10) ───
 
   /**
-   * Authenticates user credentials and returns the validated user entity (Sprint 2.7).
+   * Authenticates user credentials and returns the validated user entity and tokens.
    *
    * Workflow:
    * 1. Normalize email address.
@@ -645,12 +649,15 @@ class AuthService {
    *    - SUSPENDED / INACTIVE -> 403 Forbidden ('Your account has been deactivated. Please contact support.')
    *    - Unverified (isEmailVerified === false or status === PENDING) -> 403 Forbidden ('Account not verified. Please verify your email with the OTP code.')
    * 5. Record successful login timestamp (lastLoginAt).
-   * 6. Return persisted user entity.
+   * 6. Create a NEW refresh token family (familyId) and unique token ID (jti) (Sprint 2.10).
+   * 7. Persist the initial refresh token state as ACTIVE in MongoDB.
+   * 8. Generate cryptographically signed JWT access token & refresh token.
+   * 9. Return persisted user entity, access token, and refresh token (for HttpOnly cookie).
    *
    * @param {Object} credentials - Validated login input.
    * @param {string} credentials.email - User email.
    * @param {string} credentials.password - Raw plaintext password candidate.
-   * @returns {Promise<import('mongoose').Document>} Authenticated user document.
+   * @returns {Promise<Object>} Authenticated user payload with tokens.
    * @throws {AppError} 401 Unauthorized on invalid credentials, 403 Forbidden on disabled/unverified account.
    */
   async login({ email, password }) {
@@ -702,9 +709,26 @@ class AuthService {
 
     const resultUser = updatedUser || user;
 
-    // 7. Generate cryptographically signed JWT access token (Sprint 2.8) & refresh token (Sprint 2.9)
+    // 7. Initialize a brand-new token family & persistent token record (Sprint 2.10)
+    const familyId = generateFamilyId();
+    const jti = generateJti();
+    const refreshExpiresAt = new Date(
+      Date.now() +
+        (JWT_POLICY.REFRESH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000)
+    );
+
+    await this._authRepository.createRefreshToken({
+      jti,
+      familyId,
+      userId: resultUser._id || resultUser.id,
+      status: REFRESH_TOKEN_STATUSES.ACTIVE,
+      issuedAt: new Date(),
+      expiresAt: refreshExpiresAt,
+    });
+
+    // 8. Generate cryptographically signed JWT access token & refresh token
     const accessToken = generateAccessToken(resultUser);
-    const refreshToken = generateRefreshToken(resultUser);
+    const refreshToken = generateRefreshToken(resultUser, { jti, familyId });
 
     logger.info(`User logged in successfully: ${normalizedEmail}`, {
       context: 'AuthService',
@@ -727,28 +751,37 @@ class AuthService {
     };
   }
 
-  // ─── Refresh Token Workflow (Sprint 2.9) ────────────────────────────
+  // ─── Single-Use Refresh Token Rotation & Reuse Detection (Sprint 2.10) ──
 
   /**
-   * Validates a refresh token and issues a new access token (Sprint 2.9).
+   * Rotates a single-use refresh token, enforces reuse detection, and issues a new access token + replacement refresh token.
    *
    * Workflow:
    * 1. Validate refresh token existence and format.
-   * 2. Cryptographically verify signature, algorithm, issuer, audience, and type ('refresh').
-   * 3. Extract subject (user ID) from token payload.
-   * 4. Retrieve user entity from repository.
-   * 5. Enforce account status and verification constraints:
+   * 2. Cryptographically verify signature, algorithm (HS256 pinned), issuer, audience, and type ('refresh').
+   * 3. Extract subject (user ID), jti, and familyId from token payload.
+   * 4. Retrieve user entity from repository and enforce current account state:
    *    - Non-existent user -> 401 Unauthorized ('Invalid or expired refresh token.')
    *    - SUSPENDED / INACTIVE -> 403 Forbidden ('Your account has been deactivated. Please contact support.')
    *    - Unverified (isEmailVerified === false or status === PENDING) -> 403 Forbidden ('Account not verified. Please verify your email with the OTP code.')
-   * 6. Issue a NEW cryptographically signed JWT access token.
-   * 7. Return sanitized result containing new access token and user profile.
-   *
-   * Note: Sprint 2.9 does NOT rotate the refresh token.
+   * 5. Query persistent token state in MongoDB by jti:
+   *    - Token not found / owner mismatch / family mismatch -> 401 Unauthorized ('Invalid refresh token. Please log in again.')
+   *    - Token already CONSUMED or REUSED -> REUSE DETECTED!
+   *      - Mark token as REUSED.
+   *      - Revoke entire family (revokeTokenFamily).
+   *      - Throw 401 Unauthorized ('Refresh token reuse detected. Please authenticate again.').
+   *    - Token REVOKED -> 401 Unauthorized ('Refresh token has been revoked. Please log in again.').
+   *    - Token not ACTIVE or Expired -> 401 Unauthorized ('Invalid or expired refresh token. Please log in again.').
+   * 6. Generate new replacement jti and signed refresh token within the SAME family.
+   * 7. Atomically transition old token from ACTIVE to CONSUMED (linking replacedByTokenId).
+   *    - If atomic update returns null (concurrent race), detect replay and revoke family.
+   * 8. Persist new replacement refresh token as ACTIVE in MongoDB.
+   * 9. Generate fresh cryptographically signed JWT access token.
+   * 10. Return sanitized result containing new access token, replacement refresh token, and user profile.
    *
    * @param {string} refreshToken - Raw refresh token extracted from HttpOnly cookie.
-   * @returns {Promise<Object>} Object containing new accessToken, tokenType, expiresIn, and user entity.
-   * @throws {AppError} 401 Unauthorized on invalid/expired token, 403 Forbidden on disabled/unverified account.
+   * @returns {Promise<Object>} Object containing new accessToken, replacement refreshToken, tokenType, expiresIn, and user entity.
+   * @throws {AppError} 401 Unauthorized on invalid/expired/reused token, 403 Forbidden on disabled/unverified account.
    */
   async refreshAccessToken(refreshToken) {
     if (!refreshToken || typeof refreshToken !== 'string') {
@@ -770,20 +803,19 @@ class AuthService {
       );
     }
 
-    if (!decoded || !decoded.sub) {
+    if (!decoded || !decoded.sub || !decoded.jti || !decoded.familyId) {
       throw AppError.unauthorized('Invalid refresh token payload.');
     }
 
-    // 2. Retrieve user by ID from MongoDB
-    const userId = decoded.sub;
+    const { jti, familyId, sub: userId } = decoded;
+
+    // 2. Retrieve user by ID from MongoDB and enforce current account state
     const user = await this._authRepository.findById(userId);
 
     if (!user) {
       throw AppError.unauthorized('Invalid or expired refresh token.');
     }
 
-    // 3. Enforce current account state rules
-    // a. Check if account is suspended or inactive
     if (
       user.status === ACCOUNT_STATUSES.SUSPENDED ||
       user.status === ACCOUNT_STATUSES.INACTIVE
@@ -793,21 +825,143 @@ class AuthService {
       );
     }
 
-    // b. Check if email verification is completed
     if (!user.isEmailVerified || user.status === ACCOUNT_STATUSES.PENDING) {
       throw AppError.forbidden(
         'Account not verified. Please verify your email with the OTP code.'
       );
     }
 
-    // 4. Generate NEW cryptographically signed JWT access token
+    // 3. Retrieve persistent token record from MongoDB
+    const storedToken = await this._authRepository.findRefreshTokenByJti(jti);
+
+    if (!storedToken) {
+      throw AppError.unauthorized(
+        'Invalid refresh token. Please log in again.'
+      );
+    }
+
+    const storedUserId = storedToken.userId?._id
+      ? storedToken.userId._id.toString()
+      : storedToken.userId?.toString();
+    const expectedUserId = user._id ? user._id.toString() : user.id?.toString();
+
+    if (storedUserId !== expectedUserId || storedToken.familyId !== familyId) {
+      throw AppError.unauthorized(
+        'Invalid refresh token. Please log in again.'
+      );
+    }
+
+    // 4. Reuse Detection: Check if token has already been consumed or replayed
+    if (
+      storedToken.status === REFRESH_TOKEN_STATUSES.CONSUMED ||
+      storedToken.status === REFRESH_TOKEN_STATUSES.REUSED
+    ) {
+      // Security Event: Token theft / replay detected!
+      await this._authRepository.markTokenAsReused(jti);
+      await this._authRepository.revokeTokenFamily(
+        familyId,
+        'Refresh token reuse detected'
+      );
+
+      logger.warn(
+        `Refresh token reuse detected for user ID: ${expectedUserId}`,
+        {
+          context: 'AuthService',
+          userId: expectedUserId,
+          event: 'REFRESH_TOKEN_REUSE_DETECTED',
+        }
+      );
+
+      const reuseError = AppError.unauthorized(
+        'Refresh token reuse detected. Please authenticate again.'
+      );
+      reuseError.isTokenReuse = true;
+      throw reuseError;
+    }
+
+    // Check if token or family is revoked
+    if (storedToken.status === REFRESH_TOKEN_STATUSES.REVOKED) {
+      throw AppError.unauthorized(
+        'Refresh token has been revoked. Please log in again.'
+      );
+    }
+
+    if (storedToken.status !== REFRESH_TOKEN_STATUSES.ACTIVE) {
+      throw AppError.unauthorized(
+        'Invalid refresh token. Please log in again.'
+      );
+    }
+
+    if (new Date(storedToken.expiresAt) <= new Date()) {
+      throw AppError.unauthorized(
+        'Your refresh token has expired. Please log in again.'
+      );
+    }
+
+    // 5. Prepare replacement refresh token in the SAME family
+    const newJti = generateJti();
+    const newRefreshToken = generateRefreshToken(user, {
+      jti: newJti,
+      familyId,
+    });
+    const newExpiresAt = new Date(
+      Date.now() +
+        (JWT_POLICY.REFRESH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000)
+    );
+
+    // 6. Atomically consume the old token (ensures race-condition safety)
+    const consumedOldToken = await this._authRepository.consumeRefreshToken(
+      jti,
+      familyId,
+      newJti
+    );
+
+    if (!consumedOldToken) {
+      // Concurrency race: Another request consumed this token simultaneously!
+      const currentTokenState =
+        await this._authRepository.findRefreshTokenByJti(jti);
+      if (
+        currentTokenState &&
+        (currentTokenState.status === REFRESH_TOKEN_STATUSES.CONSUMED ||
+          currentTokenState.status === REFRESH_TOKEN_STATUSES.REUSED)
+      ) {
+        await this._authRepository.markTokenAsReused(jti);
+        await this._authRepository.revokeTokenFamily(
+          familyId,
+          'Concurrent refresh token reuse detected'
+        );
+        const reuseErr = AppError.unauthorized(
+          'Refresh token reuse detected. Please authenticate again.'
+        );
+        reuseErr.isTokenReuse = true;
+        throw reuseErr;
+      }
+      throw AppError.unauthorized(
+        'Invalid or revoked refresh token. Please log in again.'
+      );
+    }
+
+    // 7. Persist replacement token as ACTIVE in MongoDB
+    await this._authRepository.createRefreshToken({
+      jti: newJti,
+      familyId,
+      userId: user._id || user.id,
+      status: REFRESH_TOKEN_STATUSES.ACTIVE,
+      issuedAt: new Date(),
+      expiresAt: newExpiresAt,
+    });
+
+    // 8. Generate fresh cryptographically signed JWT access token
     const accessToken = generateAccessToken(user);
 
-    logger.info(`Access token refreshed successfully for user ID: ${userId}`, {
-      context: 'AuthService',
-      userId: user._id ? user._id.toString() : user.id,
-      role: user.role,
-    });
+    logger.info(
+      `Access token rotated successfully for user ID: ${expectedUserId}`,
+      {
+        context: 'AuthService',
+        userId: expectedUserId,
+        role: user.role,
+      }
+    );
 
     const rawUser =
       typeof user.toObject === 'function' ? user.toObject() : user;
@@ -816,6 +970,7 @@ class AuthService {
       ...rawUser,
       user,
       accessToken,
+      refreshToken: newRefreshToken,
       tokenType: 'Bearer',
       expiresIn: config.jwt?.accessExpiresIn || config.jwt?.expiresIn || '15m',
     };

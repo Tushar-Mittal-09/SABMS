@@ -403,19 +403,37 @@ const decodeAccessToken = (token, options = {}) => {
   return jwt.decode(token, { complete: options.complete || false });
 };
 
-// ─── JWT Refresh Token Helpers (Sprint 2.9) ──────────────────────────
+// ─── JWT Refresh Token Helpers (Sprint 2.9 & Sprint 2.10) ────────────
+
+/**
+ * Generates a cryptographically secure random JWT ID (jti).
+ * @returns {string} UUID v4 string
+ */
+const generateJti = () => {
+  return crypto.randomUUID();
+};
+
+/**
+ * Generates a cryptographically secure random token family identifier.
+ * @returns {string} UUID v4 string
+ */
+const generateFamilyId = () => {
+  return crypto.randomUUID();
+};
 
 /**
  * Generates a long-lived, cryptographically signed JWT refresh token for an authenticated user.
  *
  * Security Invariants:
- * - Contains ONLY minimal safe claims (sub, type: 'refresh', iat, exp, iss, aud).
+ * - Contains ONLY minimal safe claims (sub, jti, familyId, type: 'refresh', iat, exp, iss, aud).
  * - Never includes passwords, password hashes, OTPs, OTP hashes, Redis keys, or secrets.
  * - Algorithm is strictly pinned to configured HMAC algorithm (default: HS256).
  * - Signed with dedicated refresh secret (JWT_REFRESH_SECRET), completely distinct from access secret.
  *
  * @param {Object|import('mongoose').Document|string} user - Authenticated user entity or object with id/sub.
  * @param {Object} [options={}] - Custom overrides for testing/configuration.
+ * @param {string} [options.jti] - Optional explicit jti.
+ * @param {string} [options.familyId] - Optional explicit familyId.
  * @param {string} [options.secret] - Optional secret override.
  * @param {string} [options.expiresIn] - Optional expiration override.
  * @param {string} [options.issuer] - Optional issuer override.
@@ -437,8 +455,13 @@ const generateRefreshToken = (user, options = {}) => {
     throw new Error('User ID (sub) is required to generate a refresh token');
   }
 
+  const jti = options.jti || generateJti();
+  const familyId = options.familyId || generateFamilyId();
+
   const payload = {
     sub: String(userId),
+    jti,
+    familyId,
     type: JWT_POLICY.REFRESH_TOKEN_PURPOSE || 'refresh',
   };
 
@@ -473,6 +496,7 @@ const generateRefreshToken = (user, options = {}) => {
  * Security Invariants:
  * - Enforces separate JWT_REFRESH_SECRET.
  * - Enforces token purpose/type claim ('refresh') to eliminate token-type confusion attacks.
+ * - Enforces presence of unique jti and familyId.
  * - Rejects expired, tampered, or malformed tokens.
  *
  * @param {string} token - Raw JWT refresh token string.
@@ -522,6 +546,19 @@ const verifyRefreshToken = (token, options = {}) => {
   const expectedType = JWT_POLICY.REFRESH_TOKEN_PURPOSE || 'refresh';
   if (decoded.type !== expectedType) {
     const error = new Error('Invalid token type. Expected refresh token.');
+    error.name = 'JsonWebTokenError';
+    throw error;
+  }
+
+  if (
+    !decoded.jti ||
+    typeof decoded.jti !== 'string' ||
+    !decoded.familyId ||
+    typeof decoded.familyId !== 'string'
+  ) {
+    const error = new Error(
+      'Invalid refresh token payload: missing jti or familyId.'
+    );
     error.name = 'JsonWebTokenError';
     throw error;
   }
@@ -601,6 +638,8 @@ module.exports = {
   generateAccessToken,
   verifyAccessToken,
   decodeAccessToken,
+  generateJti,
+  generateFamilyId,
   generateRefreshToken,
   verifyRefreshToken,
   decodeRefreshToken,

@@ -65,9 +65,12 @@
 ### 3.4 Token Lifecycle & Refresh Tests (Sprint 2.9, 2.10, 2.11)
 
 - [x] `TC-AUTH-030a`: Call `/refresh` with valid refresh cookie returns new JWT access token (`auth.refresh-token.test.js`) (Sprint 2.9).
-- [x] `TC-AUTH-030b`: Refresh token generation contains valid claims (`sub`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`) and uses separate secret (`auth.refresh-token.test.js`) (Sprint 2.9).
-- [x] `TC-AUTH-031`: Call `/refresh` with missing, expired, malformed, or tampered cookie returns `401 Unauthorized` (`auth.refresh-token.test.js`) (Sprint 2.9).
-- [ ] `TC-AUTH-032`: **Single-Use Rotation & Theft Detection**: Presenting an already-consumed refresh token invalidates all user sessions (Sprint 2.10).
+- [x] `TC-AUTH-030b`: Refresh token generation contains valid claims (`sub`, `jti`, `familyId`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`) and uses separate secret (`auth.refresh-token.test.js`) (Sprint 2.9 & 2.10).
+- [x] `TC-AUTH-031`: Call `/refresh` with missing, expired, malformed, or tampered cookie returns `401 Unauthorized` (`auth.refresh-token.test.js`) (Sprint 2.9 & 2.10).
+- [x] `TC-AUTH-032a`: Single-Use Token Rotation: Valid refresh atomically marks old token CONSUMED, issues and sets new ACTIVE replacement token in same family, and delivers new HttpOnly cookie (`auth.refresh-token-rotation.test.js`) (Sprint 2.10).
+- [x] `TC-AUTH-032b`: Replay & Reuse Detection: Presenting an already-consumed or reused refresh token triggers reuse detection, revokes the entire token family, clears the client refresh cookie, and returns `401 Unauthorized` (`auth.refresh-token-rotation.test.js`) (Sprint 2.10).
+- [x] `TC-AUTH-032c`: Multi-step rotation chains (R1 -> R2 -> R3) maintain atomic lineage and invalidate previous ancestors (`auth.refresh-token-rotation.test.js`) (Sprint 2.10).
+- [x] `TC-AUTH-032d`: Concurrent refresh race protection guarantees at most one successful rotation with subsequent replay detection (`auth.refresh-token-rotation.test.js`) (Sprint 2.10).
 - [ ] `TC-AUTH-033`: Call `/logout` clears refresh cookie and adds active access token JTI to Redis blocklist (Sprint 2.11).
 
 ### 3.5 Password Recovery & Security Tests (Sprint 2.12, 2.13, 2.14)

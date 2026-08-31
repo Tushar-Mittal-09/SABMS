@@ -1,12 +1,14 @@
 'use strict';
 
 const userRepository = require('../users/user.repository');
+const RefreshToken = require('./refresh-token.model');
 const { getRedisClient } = require('../../config/redis');
 const {
   EMAIL_OTP_TTL_SECONDS,
   EMAIL_OTP_RESEND_COOLDOWN_SECONDS,
   PHONE_OTP_TTL_SECONDS,
   PHONE_OTP_RESEND_COOLDOWN_SECONDS,
+  REFRESH_TOKEN_STATUSES,
 } = require('./auth.constants');
 const {
   createOtpRedisKey,
@@ -23,16 +25,19 @@ const {
  * Authentication Persistence Repository.
  *
  * Encapsulates authentication-specific persistence operations,
- * credential retrievals, MongoDB user lookups, and Redis OTP operations.
+ * credential retrievals, MongoDB user lookups, RefreshToken state tracking,
+ * and Redis OTP operations.
  */
 class AuthRepository {
   /**
    * @param {Object} [options]
    * @param {import('../users/user.repository').UserRepository} [options.userRepo]
+   * @param {import('mongoose').Model} [options.refreshTokenModel]
    * @param {import('ioredis').Redis|Function} [options.redisClient]
    */
   constructor(options = {}) {
     this._userRepository = options.userRepo || userRepository;
+    this._refreshTokenModel = options.refreshTokenModel || RefreshToken;
     this._redisClientGetter =
       typeof options.redisClient === 'function'
         ? options.redisClient
@@ -453,6 +458,145 @@ class AuthRepository {
       redis.del(createPhoneOtpCooldownRedisKey(normalized)),
       redis.del(createPhoneOtpResendCountRedisKey(normalized)),
     ]);
+  }
+
+  // ─── Refresh Token Persistence Operations (Sprint 2.10) ───────────────
+
+  /**
+   * Persists a new refresh token entity.
+   *
+   * @param {Object} tokenData
+   * @param {string} tokenData.jti - Cryptographically unique JWT ID.
+   * @param {string} tokenData.familyId - Cryptographically unique family ID.
+   * @param {string|import('mongoose').Types.ObjectId} tokenData.userId - Owner user ID.
+   * @param {string} [tokenData.status=ACTIVE] - Initial token status.
+   * @param {Date} tokenData.expiresAt - Expiration timestamp.
+   * @param {Date} [tokenData.issuedAt] - Issuance timestamp.
+   * @returns {Promise<import('mongoose').Document>}
+   */
+  async createRefreshToken(tokenData) {
+    return this._refreshTokenModel.create(tokenData);
+  }
+
+  /**
+   * Finds a refresh token by its unique JWT ID (jti).
+   *
+   * @param {string} jti
+   * @returns {Promise<import('mongoose').Document|null>}
+   */
+  async findRefreshTokenByJti(jti) {
+    if (!jti || typeof jti !== 'string') return null;
+    return this._refreshTokenModel.findOne({ jti });
+  }
+
+  /**
+   * Finds an active refresh token by its jti and optional familyId.
+   *
+   * @param {string} jti
+   * @param {string} [familyId]
+   * @returns {Promise<import('mongoose').Document|null>}
+   */
+  async findActiveRefreshToken(jti, familyId) {
+    if (!jti || typeof jti !== 'string') return null;
+    const query = { jti, status: REFRESH_TOKEN_STATUSES.ACTIVE };
+    if (familyId) query.familyId = familyId;
+    return this._refreshTokenModel.findOne(query);
+  }
+
+  /**
+   * Atomically transitions a refresh token from ACTIVE to CONSUMED.
+   * Ensures single-use semantics and concurrency safety.
+   *
+   * @param {string} jti - Token ID to consume.
+   * @param {string} familyId - Token family identifier.
+   * @param {string} [replacedByTokenId] - Successor token identifier.
+   * @param {Date} [now=new Date()] - Consumption timestamp.
+   * @returns {Promise<import('mongoose').Document|null>} Updated document if successfully consumed, null if not active.
+   */
+  async consumeRefreshToken(
+    jti,
+    familyId,
+    replacedByTokenId = null,
+    now = new Date()
+  ) {
+    if (!jti || !familyId) return null;
+    return this._refreshTokenModel.findOneAndUpdate(
+      {
+        jti,
+        familyId,
+        status: REFRESH_TOKEN_STATUSES.ACTIVE,
+      },
+      {
+        $set: {
+          status: REFRESH_TOKEN_STATUSES.CONSUMED,
+          consumedAt: now,
+          replacedByTokenId,
+        },
+      },
+      { new: true }
+    );
+  }
+
+  /**
+   * Marks a token record as REUSED upon replay detection.
+   * Preserves historical evidence for audit trails.
+   *
+   * @param {string} jti - Reused token identifier.
+   * @param {Date} [reuseDetectedAt=new Date()] - Detection timestamp.
+   * @returns {Promise<import('mongoose').Document|null>}
+   */
+  async markTokenAsReused(jti, reuseDetectedAt = new Date()) {
+    if (!jti) return null;
+    return this._refreshTokenModel.findOneAndUpdate(
+      { jti },
+      {
+        $set: {
+          status: REFRESH_TOKEN_STATUSES.REUSED,
+          reuseDetectedAt,
+        },
+      },
+      { new: true }
+    );
+  }
+
+  /**
+   * Revokes all active/non-reused tokens belonging to an entire family upon theft/reuse detection.
+   *
+   * @param {string} familyId - Family identifier to revoke.
+   * @param {string} [reason='Refresh token reuse detected'] - Revocation reason.
+   * @param {Date} [revokedAt=new Date()] - Revocation timestamp.
+   * @returns {Promise<import('mongodb').UpdateResult>}
+   */
+  async revokeTokenFamily(
+    familyId,
+    reason = 'Refresh token reuse detected',
+    revokedAt = new Date()
+  ) {
+    if (!familyId) return { modifiedCount: 0 };
+    return this._refreshTokenModel.updateMany(
+      {
+        familyId,
+        status: { $ne: REFRESH_TOKEN_STATUSES.REUSED },
+      },
+      {
+        $set: {
+          status: REFRESH_TOKEN_STATUSES.REVOKED,
+          revokedAt,
+          revokedReason: reason,
+        },
+      }
+    );
+  }
+
+  /**
+   * Retrieves all token records for a given family (for audit and inspection).
+   *
+   * @param {string} familyId
+   * @returns {Promise<Array<import('mongoose').Document>>}
+   */
+  async getTokensByFamily(familyId) {
+    if (!familyId) return [];
+    return this._refreshTokenModel.find({ familyId }).sort({ issuedAt: 1 });
   }
 }
 

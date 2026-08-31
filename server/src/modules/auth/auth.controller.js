@@ -108,14 +108,15 @@ class AuthController {
   });
 
   /**
-   * Access Token Refresh Endpoint Handler (Sprint 2.9).
+   * Access Token Refresh & Single-Use Rotation Endpoint Handler (Sprint 2.9 & Sprint 2.10).
    * POST /api/v1/auth/refresh
    *
    * Security Boundaries:
    * - Reads refresh token strictly from HttpOnly cookie (req.cookies / req.signedCookies).
    * - Ignores/rejects tokens provided in request body, Authorization headers, or query parameters.
+   * - Replaces the HttpOnly refresh token cookie with the newly rotated single-use token (Sprint 2.10).
    * - Never returns the refresh token in JSON response payload.
-   * - Does NOT rotate the refresh token (Sprint 2.10 scope).
+   * - Clears the refresh token cookie upon reuse detection.
    */
   refresh = catchAsync(async (req, res) => {
     const cookieName =
@@ -127,16 +128,30 @@ class AuthController {
       throw AppError.unauthorized('Refresh token is required');
     }
 
-    const refreshResult = await authService.refreshAccessToken(refreshToken);
-    const user = refreshResult.user || refreshResult;
+    try {
+      const refreshResult = await authService.refreshAccessToken(refreshToken);
+      const user = refreshResult.user || refreshResult;
 
-    const responseData = formatLoginResponse(user, {
-      accessToken: refreshResult.accessToken,
-      tokenType: refreshResult.tokenType || 'Bearer',
-      expiresIn: refreshResult.expiresIn,
-    });
+      // Replace HttpOnly Refresh Token Cookie with newly rotated token (Sprint 2.10)
+      if (refreshResult.refreshToken) {
+        const cookieOptions = getRefreshTokenCookieOptions();
+        res.cookie(cookieName, refreshResult.refreshToken, cookieOptions);
+      }
 
-    return res.success(responseData, 'Access token refreshed successfully.');
+      const responseData = formatLoginResponse(user, {
+        accessToken: refreshResult.accessToken,
+        tokenType: refreshResult.tokenType || 'Bearer',
+        expiresIn: refreshResult.expiresIn,
+      });
+
+      return res.success(responseData, 'Access token refreshed successfully.');
+    } catch (err) {
+      if (err.isTokenReuse) {
+        const cookieOptions = getRefreshTokenCookieOptions();
+        res.clearCookie(cookieName, cookieOptions);
+      }
+      throw err;
+    }
   });
 }
 

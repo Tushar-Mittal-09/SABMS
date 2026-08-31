@@ -112,7 +112,7 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 - **Sprint Boundaries**:
   - Access Tokens (JWT): Sprint 2.8 `[IMPLEMENTED]`.
   - Refresh Tokens & HttpOnly Cookie: Sprint 2.9 `[IMPLEMENTED]`.
-  - Token Rotation & Theft Detection: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - Token Rotation & Theft Detection: Sprint 2.10 `[IMPLEMENTED]`.
   - Logout & Session Invalidation: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
 
 ---

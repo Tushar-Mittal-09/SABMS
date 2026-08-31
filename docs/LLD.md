@@ -205,9 +205,9 @@ class AppError extends Error {
   9. **Sprint Boundaries**:
      - JWT Access Token: Sprint 2.8 `[IMPLEMENTED]`.
      - Refresh Tokens & HttpOnly Cookie: Sprint 2.9 `[IMPLEMENTED]`.
-     - Token Rotation & Reuse Detection: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+     - Token Rotation & Reuse Detection: Sprint 2.10 `[IMPLEMENTED]`.
      - Logout & Revocation: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
-- **Sprint Tasks**: Sprint 2.7 (Login), Sprint 2.8 (JWT Access Token), & Sprint 2.9 (Refresh Token & Cookie Issuance).
+- **Sprint Tasks**: Sprint 2.7 (Login), Sprint 2.8 (JWT Access Token), Sprint 2.9 (Refresh Token & Cookie Issuance), & Sprint 2.10 (Single-Use Rotation & Reuse Detection).
 
 ### SD-04: Forgot Password
 
@@ -230,15 +230,26 @@ class AppError extends Error {
 - **Workflow**: Extracts session context → Deletes session & refresh token family keys from Redis → Adds access token JTI to Redis blocklist → Clears client `HttpOnly` refresh cookie.
 - **Sprint Task**: Sprint 2.11 (Logout).
 
-### SD-07: Refresh Access Token
+### SD-07: Refresh Access Token & Single-Use Rotation
 
-- **Purpose**: Issue new Access Token using valid Refresh Cookie.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.helper.js`, `auth.repository.js`.
-- **Workflow (Sprint 2.9)**: Reads `refreshToken` cookie → Verifies signature against `JWT_REFRESH_SECRET`, algorithm, issuer, audience, and type (`refresh`) → Loads User from MongoDB → Validates account eligibility (active & verified) → Generates and returns a fresh JWT Access Token in JSON response (`formatLoginResponse`).
+- **Purpose**: Issue new Access Token and rotate single-use Refresh Token using valid Refresh Cookie, detecting token reuse and protecting against replay attacks.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.helper.js`, `auth.repository.js`, `refresh-token.model.js`.
+- **Workflow (Sprint 2.10)**:
+  1. Reads `refreshToken` strictly from HttpOnly cookie.
+  2. Verifies cryptographic signature against `JWT_REFRESH_SECRET`, algorithm (pinned HS256), issuer, audience, type (`refresh`), and required claims (`jti`, `familyId`, `sub`).
+  3. Loads User from MongoDB and verifies active/verified account invariants.
+  4. Looks up `RefreshToken` record by `jti` from MongoDB.
+  5. **Reuse Detection**: If the token is not `ACTIVE` (e.g. `CONSUMED` or `REUSED`), immediately marks token `REUSED`, revokes the entire token family (`revokeTokenFamily`), clears the client refresh cookie, logs a security warning, and throws `401 Unauthorized`.
+  6. **Single-Use Rotation**: Generates a replacement single-use token with a new `jti` within the same `familyId`.
+  7. **Atomic Consumption**: Atomically transitions old token to `CONSUMED` with `replacedByTokenId = newJti` using `findOneAndUpdate({ jti, familyId, status: 'ACTIVE' })`.
+  8. Persists replacement token in MongoDB as `ACTIVE`.
+  9. Replaces client `HttpOnly` cookie with the new rotated refresh token.
+  10. Generates and returns a fresh short-lived JWT Access Token in standard envelope (`formatLoginResponse`).
 - **Sprint Boundaries**:
   - **Refresh Token Validation & Access Token Issuance**: Sprint 2.9 `[IMPLEMENTED]`.
-  - **Single-Use Token Rotation & Reuse Detection**: Sprint 2.10 `[NOT IMPLEMENTED / FUTURE SPRINT]`. Refresh token is NOT rotated in Sprint 2.9.
-- **Sprint Task**: Sprint 2.9 & 2.10 (Refresh Token & Single-Use Rotation).
+  - **Single-Use Token Rotation & Reuse Detection**: Sprint 2.10 `[IMPLEMENTED]`.
+  - **Logout & Session Termination**: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+- **Sprint Task**: Sprint 2.9 & Sprint 2.10 (Refresh Token, Single-Use Rotation & Reuse Detection).
 
 ### SD-08: Change Password
 

@@ -83,6 +83,14 @@ describe('JWT Access Token Generation & Security (Sprint 2.8)', () => {
       isPhoneVerified: true,
       createdAt: new Date('2026-08-15T12:00:00.000Z'),
     });
+
+    jest
+      .spyOn(authRepository, 'createRefreshToken')
+      .mockImplementation(async (data) => ({
+        _id: '64a7f8e9c1d2e3f4a5b6c7dc',
+        ...data,
+        toObject: () => data,
+      }));
   });
 
   afterEach(() => {

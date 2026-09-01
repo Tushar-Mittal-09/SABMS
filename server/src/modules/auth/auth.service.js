@@ -21,6 +21,7 @@ const {
   PHONE_OTP_MAX_ATTEMPTS,
   PHONE_OTP_MAX_RESENDS,
   REFRESH_TOKEN_STATUSES,
+  REFRESH_TOKEN_REVOCATION_REASONS,
   JWT_POLICY,
 } = require('./auth.constants');
 const {
@@ -974,6 +975,77 @@ class AuthService {
       tokenType: 'Bearer',
       expiresIn: config.jwt?.accessExpiresIn || config.jwt?.expiresIn || '15m',
     };
+  }
+
+  // ─── User Logout & Family-Wide Revocation (Sprint 2.11) ─────────────────
+
+  /**
+   * Invalidates a refresh token family upon user logout.
+   *
+   * Security Invariants & Behavior:
+   * - Publicly callable / Idempotent: safe against missing, already-revoked, expired, or malformed tokens.
+   * - Never trusts unverified claims: Cryptographically verifies the refresh JWT before performing any database operations.
+   * - Revokes the ENTIRE refresh token family (ACTIVE and CONSUMED sibling tokens become REVOKED).
+   * - Preserves historical audit records (REUSED tokens remain marked REUSED).
+   * - Never modifies User account state (roles, verification flags, password hash, status).
+   * - Never logs sensitive identifiers, tokens, secrets, jti, or familyId.
+   * - Does not maintain or modify access-token blacklists (access tokens expire naturally).
+   *
+   * @param {string|Object} [tokenOrPayload] - Raw refresh token string or object containing refreshToken.
+   * @returns {Promise<{ loggedOut: boolean }>} Safe domain logout result.
+   */
+  async logout(tokenOrPayload) {
+    const refreshToken =
+      typeof tokenOrPayload === 'object' && tokenOrPayload !== null
+        ? tokenOrPayload.refreshToken
+        : tokenOrPayload;
+
+    // 1. Missing or non-string token: idempotent safe return without mutation
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      return { loggedOut: true };
+    }
+
+    // 2. Cryptographically verify signature, algorithm, issuer, audience, type, jti, and familyId
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch {
+      // If token is expired, malformed, invalid signature, or wrong type:
+      // We do NOT trust unverified claims for database mutation.
+      // Idempotently return safe success.
+      return { loggedOut: true };
+    }
+
+    if (!decoded || !decoded.jti || !decoded.familyId) {
+      return { loggedOut: true };
+    }
+
+    const { jti, familyId, sub: userId } = decoded;
+
+    // 3. Locate the persistent token record in MongoDB
+    const storedToken = await this._authRepository.findRefreshTokenByJti(jti);
+
+    if (!storedToken) {
+      // Token not found in database: safe return
+      return { loggedOut: true };
+    }
+
+    // 4. Revoke the entire refresh-token family
+    const targetFamilyId = storedToken.familyId || familyId;
+    const revocationReason =
+      REFRESH_TOKEN_REVOCATION_REASONS?.LOGOUT || 'USER_LOGOUT';
+
+    await this._authRepository.revokeTokenFamily(
+      targetFamilyId,
+      revocationReason
+    );
+
+    logger.info('User logged out successfully', {
+      context: 'AuthService',
+      ...(userId ? { userId: String(userId) } : {}),
+    });
+
+    return { loggedOut: true };
   }
 }
 

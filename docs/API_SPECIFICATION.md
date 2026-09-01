@@ -322,7 +322,7 @@
   - **Access Token (JWT)**: Sprint 2.8 `[IMPLEMENTED]` (Short-lived, ~15m, signed with HMAC-SHA256, contains `sub`, `role`, `iat`, `exp`, `iss`, `aud`).
   - **Refresh Tokens & HttpOnly Cookie**: Sprint 2.9 `[IMPLEMENTED]` (Long-lived, ~7d, signed with dedicated `JWT_REFRESH_SECRET`, contains `sub`, `jti`, `familyId`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`, delivered via `HttpOnly`, `SameSite=Strict`, scoped `Path=/api/v1/auth/refresh`).
   - **Single-Use Token Rotation & Reuse Detection**: Sprint 2.10 `[IMPLEMENTED]` (Initial family `familyId` created on login, initial token persisted as `ACTIVE`, rotated on each refresh with replacement cookie, replayed tokens trigger family revocation and cookie clearing).
-  - **Logout & Revocation endpoint**: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - **Logout & Revocation endpoint**: Sprint 2.11 `[IMPLEMENTED]`.
 - **Access**: Public
 - **Request Body**:
   ```json
@@ -379,7 +379,7 @@
 - **Sprint Boundaries**:
   - **Refresh Token Validation & Access Token Issuance**: Sprint 2.9 `[IMPLEMENTED]`.
   - **Single-Use Token Rotation & Reuse Detection**: Sprint 2.10 `[IMPLEMENTED]`.
-  - **Logout & Explicit Revocation**: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - **Logout & Explicit Revocation**: Sprint 2.11 `[IMPLEMENTED]`.
 - **Access**: Public (Requires valid `refreshToken` HttpOnly cookie)
 - **Request Body**: None (Tokens in request body, query parameters, or Authorization headers are strictly ignored/rejected).
 - **Response Headers (Success - 200 OK)**:
@@ -428,19 +428,33 @@
   }
   ```
 
-#### `POST /api/v1/auth/logout` `[FUTURE SPRINT 2.11]`
+#### `POST /api/v1/auth/logout` `[CANONICAL - SPRINT 2.11]`
 
-- **Description**: Terminates current session, invalidates refresh token family in Redis, and clears cookie.
-- **Access**: Public (Requires cookie) / Authenticated
+- **Description**: Authenticates user logout request using the `HttpOnly` refresh token cookie (`refreshToken`), cryptographically verifies the token, locates the token record by `jti`, invalidates the entire associated refresh-token family in MongoDB (`ACTIVE` and `CONSUMED` tokens become `REVOKED` with `USER_LOGOUT` reason), clears the HttpOnly refresh cookie, and returns a standardized HTTP 200 response envelope.
+- **Sprint Boundaries**:
+  - **Logout & Refresh-Token Revocation**: Sprint 2.11 `[IMPLEMENTED]`.
+  - **Access Token Blacklist / Immediate Revocation**: `[NOT IMPLEMENTED in Sprint 2.11 - Access tokens expire naturally via short TTL]`.
+- **Access**: Public at HTTP middleware level (Authenticated via `refreshToken` HttpOnly cookie)
+- **Request Body**: None (No JSON body required. Tokens in request body, query parameters, or Authorization headers are strictly ignored/rejected).
+- **Response Headers**:
+  ```http
+  Set-Cookie: refreshToken=; Path=/api/v1/auth/refresh; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict
+  ```
 - **Success Response (`200 OK`)**:
   ```json
   {
     "success": true,
-    "message": "Logged out successfully.",
-    "data": { "loggedOut": true },
+    "message": "Logged out successfully",
+    "data": null,
     "meta": null
   }
   ```
+- **Invariants & Security Behaviors**:
+  - **Cookie Cleared**: The `refreshToken` cookie is cleared using matching configuration (`HttpOnly`, `Path=/api/v1/auth/refresh`, `SameSite=Strict`, `Secure`).
+  - **Family Revoked**: The entire refresh-token family is revoked in MongoDB. Subsequent `/refresh` requests using any token from the family fail with `401 Unauthorized`.
+  - **Idempotency**: Requests with missing cookies, expired tokens, or already-revoked tokens succeed safely (`HTTP 200`), clear the browser cookie, and perform no unsafe database mutations.
+  - **No Unverified Trust**: The service never trusts unverified JWT claims (`jwt.decode()`) to mutate database records; cryptographic verification must succeed first.
+  - **Access Tokens**: Access tokens are not revoked immediately (no server-side blacklist in Sprint 2.11) and expire naturally within their ~15-minute lifespan.
 
 #### `POST /api/v1/auth/forgot-password`
 

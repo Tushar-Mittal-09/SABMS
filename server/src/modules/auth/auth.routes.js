@@ -1,7 +1,6 @@
 'use strict';
 
 const express = require('express');
-const catchAsync = require('../../shared/utils/catchAsync');
 const {
   validateBody,
 } = require('../../core/middleware/validateRequest.middleware');
@@ -47,24 +46,13 @@ router.post(
 
 router.post('/login', validateBody(loginSchema), authController.login);
 
-// ─── Token Refresh Route (Sprint 2.9) ───────────────────────────────────────
+// ─── Token Refresh Route (Sprint 2.9 & Sprint 2.10) ─────────────────────────
 
 router.post('/refresh', authController.refresh);
 
-// ─── Placeholders for Future Sprints (Preserved) ─────────────────────────────
+// ─── User Logout Route (Sprint 2.11) ────────────────────────────────────────
 
-router.post(
-  '/logout',
-  catchAsync(async (req, res) => {
-    return res.success(
-      {
-        loggedOut: true,
-        requestId: req.id,
-      },
-      'Logged out successfully (placeholder)'
-    );
-  })
-);
+router.post('/logout', authController.logout);
 
 module.exports = {
   authRouter: router,

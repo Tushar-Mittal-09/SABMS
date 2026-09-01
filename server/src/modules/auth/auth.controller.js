@@ -153,6 +153,32 @@ class AuthController {
       throw err;
     }
   });
+
+  /**
+   * User Logout Endpoint Handler (Sprint 2.11).
+   * POST /api/v1/auth/logout
+   *
+   * Security Boundaries:
+   * - Reads refresh token strictly from HttpOnly cookie (req.cookies / req.signedCookies).
+   * - Ignores/rejects tokens provided in request body, Authorization headers, or query parameters.
+   * - Cryptographically validates the refresh token and invalidates the entire associated token family.
+   * - Strictly clears the HttpOnly refresh token cookie matching configured attributes (HttpOnly, SameSite, Path, Secure).
+   * - Idempotent: Returns safe successful response if cookie is absent, expired, or already revoked.
+   * - Never returns sensitive credentials, JWT secrets, passwords, or tokens in JSON payload.
+   */
+  logout = catchAsync(async (req, res) => {
+    const cookieName =
+      config.jwt?.refreshCookieName || COOKIE_KEYS.REFRESH_TOKEN;
+    const refreshToken =
+      req.cookies?.[cookieName] || req.signedCookies?.[cookieName];
+
+    await authService.logout(refreshToken);
+
+    const cookieOptions = getRefreshTokenCookieOptions();
+    res.clearCookie(cookieName, cookieOptions);
+
+    return res.success(null, 'Logged out successfully');
+  });
 }
 
 const authControllerInstance = new AuthController();

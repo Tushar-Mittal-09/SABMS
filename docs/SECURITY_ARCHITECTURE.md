@@ -56,7 +56,15 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 ### 3.1 Single-Use Refresh Token Rotation & Theft Detection
 
 1. **Rotation**: Every call to `POST /api/v1/auth/refresh` invalidates the submitted refresh token and generates a new access token + refresh token pair.
-2. **Replay & Theft Detection**: If an already-consumed refresh token is submitted, the system flags a token theft attempt and immediately revokes the **entire token family** in Redis, terminating all active sessions for the user.
+2. **Replay & Theft Detection**: If an already-consumed refresh token is submitted, the system flags a token theft attempt and immediately revokes the **entire token family** in MongoDB, preventing any further refresh operations.
+
+### 3.2 Logout & Refresh-Token Family Revocation (Sprint 2.11)
+
+1. **Cryptographic Verification**: Incoming refresh token from HttpOnly cookie is strictly verified (`signature`, `algorithm`, `issuer`, `audience`, `type: 'refresh'`, `jti`, `familyId`) before performing any persistence operations. Unverified claims (`jwt.decode()`) are never trusted for mutation.
+2. **Family-Wide Revocation**: The service locates the token record by `jti` and atomically revokes all active and consumed tokens across the entire `familyId` in MongoDB (`status` transitions to `REVOKED` with reason `USER_LOGOUT`).
+3. **Cookie Invalidation**: The HttpOnly refresh cookie is cleared with identical attributes (`Path=/api/v1/auth/refresh`, `SameSite=Strict`, `HttpOnly`, `Secure`).
+4. **Idempotency**: Requests with missing cookies, expired tokens, or already revoked families succeed safely (`200 OK`) and clear cookies without error or information disclosure.
+5. **Access-Token Boundary**: Access tokens expire naturally via their short TTL (~15m); no server-side access-token blacklist is maintained in Sprint 2.11.
 
 ---
 
@@ -113,7 +121,7 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
   - Access Tokens (JWT): Sprint 2.8 `[IMPLEMENTED]`.
   - Refresh Tokens & HttpOnly Cookie: Sprint 2.9 `[IMPLEMENTED]`.
   - Token Rotation & Theft Detection: Sprint 2.10 `[IMPLEMENTED]`.
-  - Logout & Session Invalidation: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
+  - Logout & Session Invalidation: Sprint 2.11 `[IMPLEMENTED]`.
 
 ---
 

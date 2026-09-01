@@ -206,8 +206,8 @@ class AppError extends Error {
      - JWT Access Token: Sprint 2.8 `[IMPLEMENTED]`.
      - Refresh Tokens & HttpOnly Cookie: Sprint 2.9 `[IMPLEMENTED]`.
      - Token Rotation & Reuse Detection: Sprint 2.10 `[IMPLEMENTED]`.
-     - Logout & Revocation: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
-- **Sprint Tasks**: Sprint 2.7 (Login), Sprint 2.8 (JWT Access Token), Sprint 2.9 (Refresh Token & Cookie Issuance), & Sprint 2.10 (Single-Use Rotation & Reuse Detection).
+     - Logout & Revocation: Sprint 2.11 `[IMPLEMENTED]`.
+- **Sprint Tasks**: Sprint 2.7 (Login), Sprint 2.8 (JWT Access Token), Sprint 2.9 (Refresh Token & Cookie Issuance), Sprint 2.10 (Single-Use Rotation & Reuse Detection), & Sprint 2.11 (Logout & Token Family Revocation).
 
 ### SD-04: Forgot Password
 
@@ -223,12 +223,23 @@ class AppError extends Error {
 - **Workflow**: Validates new password & OTP → Verifies OTP against Redis hash → Hashes new password → Updates User record in MongoDB → Triggers **Global Session Revocation** in Redis → Sends confirmation email.
 - **Sprint Task**: Sprint 2.13 (Reset Password).
 
-### SD-06: User Logout
+### SD-06: User Logout & Refresh Token Family Revocation `[CANONICAL - SPRINT 2.11]`
 
-- **Purpose**: Terminate current client session and invalidate credentials.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `Redis`.
-- **Workflow**: Extracts session context → Deletes session & refresh token family keys from Redis → Adds access token JTI to Redis blocklist → Clears client `HttpOnly` refresh cookie.
-- **Sprint Task**: Sprint 2.11 (Logout).
+- **Purpose**: Invalidate current refresh token family in MongoDB and clear client HttpOnly refresh cookie.
+- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.repository.js`, `refresh-token.model.js`.
+- **Workflow**:
+  1. `POST /api/v1/auth/logout` endpoint invoked (public at HTTP middleware level; relies strictly on `refreshToken` HttpOnly cookie).
+  2. `authController.logout` reads refresh token from cookie and passes it to `authService.logout(refreshToken)`.
+  3. `authService.logout` handles missing/invalid tokens idempotently:
+     - If cookie is missing or empty, returns `{ loggedOut: true }` without database mutation.
+     - Cryptographically verifies signature, algorithm (pinned HS256), issuer, audience, type (`refresh`), `jti`, and `familyId` against `JWT_REFRESH_SECRET`.
+     - If verification fails (expired, malformed, invalid signature), safely returns without trusting unverified claims for database mutation.
+  4. Queries persistent token record by `jti` via `authRepository.findRefreshTokenByJti(jti)`.
+  5. Atomically revokes all active and consumed tokens across the `familyId` via `authRepository.revokeTokenFamily(familyId, 'USER_LOGOUT')`.
+  6. `authController` clears the HttpOnly refresh token cookie matching configured attributes (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth/refresh`, `Secure`).
+  7. Returns standardized JSON success envelope (`200 OK`, `data: null`).
+  8. Access tokens expire naturally via short TTL (~15m); no server-side blacklist is maintained in Sprint 2.11.
+- **Sprint Task**: Sprint 2.11 (Logout & Token/Session Invalidation).
 
 ### SD-07: Refresh Access Token & Single-Use Rotation
 
@@ -248,8 +259,8 @@ class AppError extends Error {
 - **Sprint Boundaries**:
   - **Refresh Token Validation & Access Token Issuance**: Sprint 2.9 `[IMPLEMENTED]`.
   - **Single-Use Token Rotation & Reuse Detection**: Sprint 2.10 `[IMPLEMENTED]`.
-  - **Logout & Session Termination**: Sprint 2.11 `[NOT IMPLEMENTED / FUTURE SPRINT]`.
-- **Sprint Task**: Sprint 2.9 & Sprint 2.10 (Refresh Token, Single-Use Rotation & Reuse Detection).
+  - **Logout & Session Termination**: Sprint 2.11 `[IMPLEMENTED]`.
+- **Sprint Task**: Sprint 2.9, Sprint 2.10 & Sprint 2.11 (Refresh Token, Single-Use Rotation, Reuse Detection & Logout Revocation).
 
 ### SD-08: Change Password
 

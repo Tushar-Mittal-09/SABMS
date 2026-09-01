@@ -71,7 +71,10 @@
 - [x] `TC-AUTH-032b`: Replay & Reuse Detection: Presenting an already-consumed or reused refresh token triggers reuse detection, revokes the entire token family, clears the client refresh cookie, and returns `401 Unauthorized` (`auth.refresh-token-rotation.test.js`) (Sprint 2.10).
 - [x] `TC-AUTH-032c`: Multi-step rotation chains (R1 -> R2 -> R3) maintain atomic lineage and invalidate previous ancestors (`auth.refresh-token-rotation.test.js`) (Sprint 2.10).
 - [x] `TC-AUTH-032d`: Concurrent refresh race protection guarantees at most one successful rotation with subsequent replay detection (`auth.refresh-token-rotation.test.js`) (Sprint 2.10).
-- [ ] `TC-AUTH-033`: Call `/logout` clears refresh cookie and adds active access token JTI to Redis blocklist (Sprint 2.11).
+- [x] `TC-AUTH-033a`: Call `POST /api/v1/auth/logout` with valid refresh cookie cryptographically verifies token, revokes entire token family (`ACTIVE` and `CONSUMED` tokens become `REVOKED` with `USER_LOGOUT` reason), clears HttpOnly cookie, and returns `200 OK` standard envelope (`auth.logout.test.js`) (Sprint 2.11).
+- [x] `TC-AUTH-033b`: Logout is idempotent: missing, expired, or already-revoked tokens return `200 OK` and clear client cookies without error or unverified DB mutation (`auth.logout.test.js`) (Sprint 2.11).
+- [x] `TC-AUTH-033c`: Post-logout token refresh rejection: subsequent `/refresh` calls with logged-out or sibling family tokens fail with `401 Unauthorized` (`auth.logout.test.js`) (Sprint 2.11).
+- [x] `TC-AUTH-033d`: Security & privacy invariants: unverified JWT claims cannot trigger family revocation, no tokens/secrets/passwords leak in responses or logs, user account attributes remain untouched (`auth.logout.test.js`) (Sprint 2.11).
 
 ### 3.5 Password Recovery & Security Tests (Sprint 2.12, 2.13, 2.14)
 

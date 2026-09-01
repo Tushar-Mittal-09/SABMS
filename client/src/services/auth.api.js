@@ -93,6 +93,16 @@ export const authApi = {
       phone: phone.trim(),
     });
   },
+
+  /**
+   * Logs out the user and invalidates refresh token family (Sprint 2.11).
+   * POST /api/v1/auth/logout
+   *
+   * @returns {Promise<{ success: boolean, message: string, data: null }>}
+   */
+  logout: async () => {
+    return apiClient.post('/auth/logout');
+  },
 };
 
 export default authApi;

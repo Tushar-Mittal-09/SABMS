@@ -111,6 +111,13 @@
 - [x] `TC-AUTH-073`: State-mutating requests with missing, mismatched, or forged CSRF headers return `403 Forbidden` (`auth.csrf.test.js`) (Sprint 2.18).
 - [x] `TC-AUTH-074`: State-mutating cross-origin requests with untrusted `Origin` / `Referer` return `403 Forbidden` (`auth.csrf.test.js`) (Sprint 2.18).
 
+### 3.9 Cross-Site Scripting (XSS) Protection Tests (Sprint 2.19)
+
+- [x] `TC-AUTH-080`: `sanitizeXssString` strips `<script>` tags, inline DOM event handlers (`onerror=`, `onload=`), and `javascript:` URIs (`auth.xss.test.js`) (Sprint 2.19).
+- [x] `TC-AUTH-081`: `sanitizeXssObject` recursively sanitizes nested objects and arrays while strictly preserving passwords and tokens (`auth.xss.test.js`) (Sprint 2.19).
+- [x] `TC-AUTH-082`: Helmet enforces enterprise Content-Security-Policy with `base-uri 'self'`, `frame-ancestors 'none'`, and `object-src 'none'` (`auth.xss.test.js`) (Sprint 2.19).
+- [x] `TC-AUTH-083`: `xssSanitizer` middleware sanitizes `req.body`, `req.query`, and `req.params` in-place while leaving password fields untouched (`auth.xss.test.js`) (Sprint 2.19).
+
 ---
 
 ## 4. Continuous Integration Quality Gates

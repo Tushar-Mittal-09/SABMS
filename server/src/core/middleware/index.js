@@ -23,6 +23,11 @@ const {
   generateCsrfToken,
   verifyCsrfTokenSignature,
 } = require('./csrf.middleware');
+const {
+  xssSanitizer,
+  sanitizeXssString,
+  sanitizeXssObject,
+} = require('./xss.middleware');
 
 module.exports = {
   authenticate,
@@ -31,6 +36,9 @@ module.exports = {
   csrfProtection,
   generateCsrfToken,
   verifyCsrfTokenSignature,
+  xssSanitizer,
+  sanitizeXssString,
+  sanitizeXssObject,
   errorHandler,
   requestId,
   responseHandler,

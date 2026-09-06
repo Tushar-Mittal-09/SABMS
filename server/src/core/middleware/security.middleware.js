@@ -13,6 +13,7 @@ const config = require('../../config/env.config');
 const { ApiResponse } = require('../response/apiResponse');
 const requestId = require('./requestId.middleware');
 const { csrfProtection } = require('./csrf.middleware');
+const { xssSanitizer } = require('./xss.middleware');
 
 /**
  * 1. Helmet Security Middleware
@@ -27,6 +28,8 @@ const helmetSecurity = helmet({
       imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
       connectSrc: ["'self'", config.clientUrl],
       objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
       upgradeInsecureRequests: config.isProduction ? [] : null,
     },
   },
@@ -223,7 +226,10 @@ const applySecurityMiddleware = (app) => {
   // 9. HTTP Parameter Pollution Defense
   app.use(hppSecurity);
 
-  // 10. Cross-Site Request Forgery (CSRF) Protection (Sprint 2.18)
+  // 10. Cross-Site Scripting (XSS) Sanitization (Sprint 2.19)
+  app.use(xssSanitizer);
+
+  // 11. Cross-Site Request Forgery (CSRF) Protection (Sprint 2.18)
   app.use(csrfProtection);
 };
 
@@ -233,6 +239,7 @@ module.exports = {
   corsSecurity,
   hppSecurity,
   mongoSanitizeSecurity,
+  xssSanitizer,
   rateLimiterSecurity,
   compressionSecurity,
   cookieParserSecurity,

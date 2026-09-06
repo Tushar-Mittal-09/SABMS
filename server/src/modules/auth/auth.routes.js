@@ -125,6 +125,10 @@ router.post(
   authController.unlockAccount
 );
 
+// ─── CSRF Token Retrieval Route (Sprint 2.18) ─────────────────────────────
+
+router.get('/csrf-token', authController.getCsrfToken);
+
 module.exports = {
   authRouter: router,
   router,

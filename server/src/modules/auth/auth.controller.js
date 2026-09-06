@@ -344,6 +344,15 @@ class AuthController {
     const result = await authService.unlockAccount(email);
     return res.success(result, 'Account unlocked successfully.');
   });
+
+  /**
+   * CSRF Token Retrieval Endpoint Handler (Sprint 2.18).
+   * GET /api/v1/auth/csrf-token
+   */
+  getCsrfToken = catchAsync(async (req, res) => {
+    const csrfToken = req.csrfToken ? req.csrfToken() : null;
+    return res.success({ csrfToken }, 'CSRF token retrieved successfully.');
+  });
 }
 
 const authControllerInstance = new AuthController();

@@ -18,11 +18,19 @@ const {
 } = require('./validateRequest.middleware');
 const { authenticate, authorize } = require('./auth.middleware');
 const { registerRateLimiter } = require('./rateLimiter.middleware');
+const {
+  csrfProtection,
+  generateCsrfToken,
+  verifyCsrfTokenSignature,
+} = require('./csrf.middleware');
 
 module.exports = {
   authenticate,
   authorize,
   registerRateLimiter,
+  csrfProtection,
+  generateCsrfToken,
+  verifyCsrfTokenSignature,
   errorHandler,
   requestId,
   responseHandler,

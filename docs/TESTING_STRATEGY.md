@@ -103,6 +103,14 @@
 - [x] `TC-AUTH-066`: `DELETE /api/v1/auth/sessions` revokes all other concurrent sessions for authenticated user (`auth.session-security.test.js`) (Sprint 2.16).
 - [x] `TC-AUTH-067`: SD-15 session validation verifies active session state and device fingerprint (`auth.session-security.test.js`) (Sprint 2.16).
 
+### 3.8 CSRF Protection & Origin Verification Tests (Sprint 2.18)
+
+- [x] `TC-AUTH-070`: Cryptographic token generation generates `<randomHex>.<hmacSignature>` signed with `COOKIE_SECRET` (`auth.csrf.test.js`) (Sprint 2.18).
+- [x] `TC-AUTH-071`: `GET /api/v1/auth/csrf-token` delivers token in body and sets `XSRF-TOKEN` cookie with `SameSite=Strict` and `httpOnly: false` (`auth.csrf.test.js`) (Sprint 2.18).
+- [x] `TC-AUTH-072`: State-mutating requests (`POST`, `PUT`, `DELETE`) with matching `XSRF-TOKEN` cookie and `X-XSRF-TOKEN` / `X-CSRF-Token` header succeed (`auth.csrf.test.js`) (Sprint 2.18).
+- [x] `TC-AUTH-073`: State-mutating requests with missing, mismatched, or forged CSRF headers return `403 Forbidden` (`auth.csrf.test.js`) (Sprint 2.18).
+- [x] `TC-AUTH-074`: State-mutating cross-origin requests with untrusted `Origin` / `Referer` return `403 Forbidden` (`auth.csrf.test.js`) (Sprint 2.18).
+
 ---
 
 ## 4. Continuous Integration Quality Gates

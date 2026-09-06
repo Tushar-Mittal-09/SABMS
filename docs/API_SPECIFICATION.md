@@ -675,6 +675,26 @@
   - `403 Forbidden`: Authenticated user is not an `ADMIN`.
   - `422 Unprocessable Entity`: Missing or malformed email address.
 
+#### `GET /api/v1/auth/csrf-token` `[SPRINT 2.18]`
+
+- **Description**: Retrieves a cryptographically signed CSRF token and sets the `XSRF-TOKEN` cookie for Double-Submit Cookie CSRF protection.
+- **Access**: Public
+- **Response Headers**:
+  ```http
+  Set-Cookie: XSRF-TOKEN=<CSPRNG_HEX>.<HMAC_SHA256>; Path=/; SameSite=Strict; Secure (in prod)
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "CSRF token retrieved successfully.",
+    "data": {
+      "csrfToken": "a1b2c3d4...64chars.e5f6...64chars"
+    },
+    "meta": null
+  }
+  ```
+
 ---
 
 ### 4.3 Users Endpoints (`/api/v1/users`)

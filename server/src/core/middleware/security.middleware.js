@@ -12,6 +12,7 @@ const cookieParser = require('cookie-parser');
 const config = require('../../config/env.config');
 const { ApiResponse } = require('../response/apiResponse');
 const requestId = require('./requestId.middleware');
+const { csrfProtection } = require('./csrf.middleware');
 
 /**
  * 1. Helmet Security Middleware
@@ -221,6 +222,9 @@ const applySecurityMiddleware = (app) => {
 
   // 9. HTTP Parameter Pollution Defense
   app.use(hppSecurity);
+
+  // 10. Cross-Site Request Forgery (CSRF) Protection (Sprint 2.18)
+  app.use(csrfProtection);
 };
 
 module.exports = {
@@ -232,6 +236,7 @@ module.exports = {
   rateLimiterSecurity,
   compressionSecurity,
   cookieParserSecurity,
+  csrfProtection,
   requestId,
   jsonBodyParser,
   urlencodedBodyParser,

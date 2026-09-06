@@ -473,6 +473,13 @@
     "meta": null
   }
   ```
+- **Invariants & Security Behaviors (Sprint 2.12)**:
+  - **Zero Account Enumeration**: Both registered and non-registered email addresses return the identical generic HTTP 200 response with null payload.
+  - **Rate Limiting & Cooldown**: Enforces a 60-second cooldown (`PASSWORD_RESET_OTP_COOLDOWN_SECONDS = 60`) and maximum 3 requests per hour (`PASSWORD_RESET_OTP_MAX_REQUESTS = 3`, `PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS = 3600`) in Redis per normalized email. Rejection with generic `429 Too Many Requests` does not reveal account existence.
+  - **Cryptographic OTP Generation & Storage**: 6-digit numeric OTP generated using `crypto.randomInt` (preserving leading zeros). Stored solely as an HMAC-SHA256 hash in isolated Redis namespace `auth:otp:reset:<email>` with 5-minute TTL (`PASSWORD_RESET_OTP_TTL_SECONDS = 300`).
+  - **Zero Leakage**: Plaintext OTP is never persisted in Redis/MongoDB, never logged, and never returned in API payloads or headers.
+  - **Fail-Safe Cleanup**: If email dispatch fails, the stored OTP in Redis is immediately purged to prevent orphan active reset codes.
+  - **Sprint Boundary**: Sprint 2.12 is strictly an OTP issuance flow; password changes, OTP verification, and session revocations are NOT part of this sprint.
 
 #### `POST /api/v1/auth/reset-password`
 

@@ -124,6 +124,22 @@ const loginSchema = z
   })
   .strict();
 
+/**
+ * Forgot Password Validation Contract (Sprint 2.12).
+ *
+ * Accepted fields:
+ * - email: valid email (trimmed, lowercased, required)
+ *
+ * Security Boundary:
+ * - Strict schema (.strict()) rejects unknown fields, privilege escalation
+ *   attempts, passwords, OTPs, and reset tokens.
+ */
+const forgotPasswordSchema = z
+  .object({
+    email: email({ required: true }),
+  })
+  .strict();
+
 module.exports = {
   registerSchema,
   verifyEmailSchema,
@@ -131,4 +147,5 @@ module.exports = {
   verifyPhoneSchema,
   resendPhoneOtpSchema,
   loginSchema,
+  forgotPasswordSchema,
 };

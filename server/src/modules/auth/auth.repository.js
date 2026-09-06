@@ -8,6 +8,9 @@ const {
   EMAIL_OTP_RESEND_COOLDOWN_SECONDS,
   PHONE_OTP_TTL_SECONDS,
   PHONE_OTP_RESEND_COOLDOWN_SECONDS,
+  PASSWORD_RESET_OTP_TTL_SECONDS,
+  PASSWORD_RESET_OTP_COOLDOWN_SECONDS,
+  PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS,
   REFRESH_TOKEN_STATUSES,
 } = require('./auth.constants');
 const {
@@ -17,6 +20,9 @@ const {
   createPhoneOtpRedisKey,
   createPhoneOtpCooldownRedisKey,
   createPhoneOtpResendCountRedisKey,
+  createPasswordResetOtpRedisKey,
+  createPasswordResetCooldownRedisKey,
+  createPasswordResetRateRedisKey,
   normalizeEmail,
   normalizePhone,
 } = require('./auth.helper');
@@ -457,6 +463,140 @@ class AuthRepository {
       redis.del(createPhoneOtpRedisKey(normalized)),
       redis.del(createPhoneOtpCooldownRedisKey(normalized)),
       redis.del(createPhoneOtpResendCountRedisKey(normalized)),
+    ]);
+  }
+
+  // ─── Redis Password Reset OTP Transient State Operations (Sprint 2.12) ─
+
+  /**
+   * Stores hashed Password Reset OTP record in Redis with strict TTL.
+   *
+   * @param {string} email - Target user email.
+   * @param {Object} otpData - OTP metadata payload (otpHash, attempts, createdAt, expiresAt).
+   * @param {number} [ttlSeconds=PASSWORD_RESET_OTP_TTL_SECONDS] - Expiry TTL in seconds.
+   * @returns {Promise<'OK'|boolean>}
+   */
+  async storePasswordResetOtp(
+    email,
+    otpData,
+    ttlSeconds = PASSWORD_RESET_OTP_TTL_SECONDS
+  ) {
+    const key = createPasswordResetOtpRedisKey(email);
+    const redis = this._getRedis();
+    const payload = JSON.stringify(otpData);
+    return redis.set(key, payload, 'EX', ttlSeconds);
+  }
+
+  /**
+   * Retrieves hashed Password Reset OTP record from Redis.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<Object|null>} Parsed OTP data object or null if expired/non-existent.
+   */
+  async getPasswordResetOtp(email) {
+    const key = createPasswordResetOtpRedisKey(email);
+    const redis = this._getRedis();
+    const data = await redis.get(key);
+    if (!data) return null;
+
+    try {
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Deletes Password Reset OTP record from Redis immediately.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<number>} Number of keys removed (0 or 1).
+   */
+  async deletePasswordResetOtp(email) {
+    const key = createPasswordResetOtpRedisKey(email);
+    const redis = this._getRedis();
+    return redis.del(key);
+  }
+
+  /**
+   * Sets password reset cooldown lock in Redis.
+   *
+   * @param {string} email - Target user email.
+   * @param {number} [cooldownSeconds=PASSWORD_RESET_OTP_COOLDOWN_SECONDS] - Cooldown period in seconds.
+   * @returns {Promise<'OK'|boolean>}
+   */
+  async setPasswordResetCooldown(
+    email,
+    cooldownSeconds = PASSWORD_RESET_OTP_COOLDOWN_SECONDS
+  ) {
+    const key = createPasswordResetCooldownRedisKey(email);
+    const redis = this._getRedis();
+    return redis.set(key, '1', 'EX', cooldownSeconds);
+  }
+
+  /**
+   * Checks if an email is currently within the password reset cooldown window.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<{ inCooldown: boolean, ttlRemaining: number }>}
+   */
+  async getPasswordResetCooldown(email) {
+    const key = createPasswordResetCooldownRedisKey(email);
+    const redis = this._getRedis();
+    const ttl = await redis.ttl(key);
+    return {
+      inCooldown: ttl > 0,
+      ttlRemaining: Math.max(ttl, 0),
+    };
+  }
+
+  /**
+   * Retrieves the current hourly password reset request count for an email.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<number>}
+   */
+  async getPasswordResetRequestCount(email) {
+    const key = createPasswordResetRateRedisKey(email);
+    const redis = this._getRedis();
+    const val = await redis.get(key);
+    return val ? parseInt(val, 10) : 0;
+  }
+
+  /**
+   * Increments the hourly password reset request count for an email.
+   * Sets TTL on first increment.
+   *
+   * @param {string} email - Target user email.
+   * @param {number} [ttlSeconds=PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS]
+   * @returns {Promise<number>} New request count.
+   */
+  async incrementPasswordResetRequestCount(
+    email,
+    ttlSeconds = PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS
+  ) {
+    const key = createPasswordResetRateRedisKey(email);
+    const redis = this._getRedis();
+    const count = await redis.incr(key);
+    if (count === 1) {
+      await redis.expire(key, ttlSeconds);
+    }
+    return count;
+  }
+
+  /**
+   * Cleans up all Password Reset OTP, cooldown, and rate limit tracking state for an email.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<void>}
+   */
+  async clearAllPasswordResetOtpState(email) {
+    const redis = this._getRedis();
+    const normalized = normalizeEmail(email);
+    await Promise.all([
+      redis.del(createPasswordResetOtpRedisKey(normalized)),
+      redis.del(createPasswordResetCooldownRedisKey(normalized)),
+      redis.del(createPasswordResetRateRedisKey(normalized)),
     ]);
   }
 

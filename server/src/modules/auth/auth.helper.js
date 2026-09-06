@@ -15,6 +15,11 @@ const {
   PHONE_OTP_COOLDOWN_KEY_PREFIX,
   PHONE_OTP_RESEND_KEY_PREFIX,
   PHONE_OTP_HASH_ALGORITHM,
+  PASSWORD_RESET_OTP_LENGTH,
+  PASSWORD_RESET_REDIS_KEY_PREFIX,
+  PASSWORD_RESET_REDIS_COOLDOWN_KEY_PREFIX,
+  PASSWORD_RESET_REDIS_RATE_KEY_PREFIX,
+  PASSWORD_RESET_OTP_HASH_ALGORITHM,
   JWT_POLICY,
 } = require('./auth.constants');
 
@@ -108,6 +113,19 @@ const generatePhoneOtp = (length = PHONE_OTP_LENGTH) => {
 };
 
 /**
+ * Generates a cryptographically secure numeric Password Reset OTP of configured length.
+ * Uses crypto.randomInt to guarantee uniform randomness and supports leading zeroes.
+ *
+ * @param {number} [length=6]
+ * @returns {string} Exact length numeric OTP string
+ */
+const generatePasswordResetOtp = (length = PASSWORD_RESET_OTP_LENGTH) => {
+  const max = Math.pow(10, length);
+  const num = crypto.randomInt(0, max);
+  return num.toString().padStart(length, '0');
+};
+
+/**
  * Creates canonical Redis key for email OTP storage.
  * @param {string} email
  * @returns {string}
@@ -159,6 +177,33 @@ const createPhoneOtpCooldownRedisKey = (phone) => {
  */
 const createPhoneOtpResendCountRedisKey = (phone) => {
   return `${PHONE_OTP_RESEND_KEY_PREFIX}${normalizePhone(phone)}`;
+};
+
+/**
+ * Creates canonical Redis key for password reset OTP storage.
+ * @param {string} email
+ * @returns {string}
+ */
+const createPasswordResetOtpRedisKey = (email) => {
+  return `${PASSWORD_RESET_REDIS_KEY_PREFIX}${normalizeEmail(email)}`;
+};
+
+/**
+ * Creates canonical Redis key for password reset cooldown tracking.
+ * @param {string} email
+ * @returns {string}
+ */
+const createPasswordResetCooldownRedisKey = (email) => {
+  return `${PASSWORD_RESET_REDIS_COOLDOWN_KEY_PREFIX}${normalizeEmail(email)}`;
+};
+
+/**
+ * Creates canonical Redis key for password reset hourly rate limitation tracking.
+ * @param {string} email
+ * @returns {string}
+ */
+const createPasswordResetRateRedisKey = (email) => {
+  return `${PASSWORD_RESET_REDIS_RATE_KEY_PREFIX}${normalizeEmail(email)}`;
 };
 
 /**
@@ -274,6 +319,38 @@ const verifyPhoneOtpHash = (
     storedHash,
     secret,
     PHONE_OTP_HASH_ALGORITHM
+  );
+};
+
+/**
+ * Computes a cryptographically secure HMAC hash of the Password Reset OTP.
+ *
+ * @param {string} otp - Plaintext 6-digit numeric OTP.
+ * @param {string} [secret] - HMAC secret key.
+ * @returns {string} Hex-encoded HMAC hash.
+ */
+const hashPasswordResetOtp = (otp, secret = config.otp?.secret) => {
+  return hashOtp(otp, secret, PASSWORD_RESET_OTP_HASH_ALGORITHM);
+};
+
+/**
+ * Verifies a Password Reset OTP candidate against stored hash using timing-safe comparison.
+ *
+ * @param {string} candidateOtp - Plaintext OTP provided by user.
+ * @param {string} storedHash - Stored HMAC hash from Redis.
+ * @param {string} [secret] - HMAC secret key.
+ * @returns {boolean} True if candidate OTP matches stored hash, false otherwise.
+ */
+const verifyPasswordResetOtpHash = (
+  candidateOtp,
+  storedHash,
+  secret = config.otp?.secret
+) => {
+  return verifyOtpHash(
+    candidateOtp,
+    storedHash,
+    secret,
+    PASSWORD_RESET_OTP_HASH_ALGORITHM
   );
 };
 
@@ -623,18 +700,24 @@ module.exports = {
   normalizePhone,
   generateEmailOtp,
   generatePhoneOtp,
+  generatePasswordResetOtp,
   createOtpRedisKey,
   createOtpCooldownRedisKey,
   createOtpResendCountRedisKey,
   createPhoneOtpRedisKey,
   createPhoneOtpCooldownRedisKey,
   createPhoneOtpResendCountRedisKey,
+  createPasswordResetOtpRedisKey,
+  createPasswordResetCooldownRedisKey,
+  createPasswordResetRateRedisKey,
   hashOtp,
   hashEmailOtp,
   hashPhoneOtp,
+  hashPasswordResetOtp,
   verifyOtpHash,
   verifyEmailOtpHash,
   verifyPhoneOtpHash,
+  verifyPasswordResetOtpHash,
   generateAccessToken,
   verifyAccessToken,
   decodeAccessToken,

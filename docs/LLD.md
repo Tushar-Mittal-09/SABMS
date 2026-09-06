@@ -209,11 +209,22 @@ class AppError extends Error {
      - Logout & Revocation: Sprint 2.11 `[IMPLEMENTED]`.
 - **Sprint Tasks**: Sprint 2.7 (Login), Sprint 2.8 (JWT Access Token), Sprint 2.9 (Refresh Token & Cookie Issuance), Sprint 2.10 (Single-Use Rotation & Reuse Detection), & Sprint 2.11 (Logout & Token Family Revocation).
 
-### SD-04: Forgot Password
+### SD-04: Forgot Password `[CANONICAL - SPRINT 2.12]`
 
-- **Purpose**: Initiate password recovery workflow without leaking user existence.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `auth.repository.js`, `Redis`, `Email Service`.
-- **Workflow**: Validates email → Queries user (generic response prevents enumeration) → Generates 6-digit reset OTP → Stores hashed OTP in Redis with rate limit counter → Sends OTP via email.
+- **Purpose**: Initiate password recovery workflow with zero account enumeration.
+- **Components**: `auth.routes.js`, `auth.schema.js`, `auth.controller.js`, `auth.service.js`, `auth.helper.js`, `auth.repository.js`, `Redis`, `email.service.js`.
+- **Workflow**:
+  1. `POST /api/v1/auth/forgot-password` endpoint invoked with `{ "email": "user@university.edu" }`.
+  2. `validateBody(forgotPasswordSchema)` strictly validates email format and rejects unexpected fields.
+  3. `authService.forgotPassword` normalizes email (`normalizeEmail`).
+  4. Checks 60s cooldown (`authRepository.getPasswordResetCooldown`) and hourly rate limit (`authRepository.getPasswordResetRequestCount`). Rejects with generic `429 Too Many Requests` if exceeded without disclosing account existence.
+  5. Queries user by normalized email in MongoDB (`authRepository.findByEmail`).
+  6. **Zero Enumeration Branching**:
+     - **Non-Existing Account**: Enforces cooldown (`60s`) and increments hourly rate limit (`3600s`) in Redis for normalized email. Does not generate OTP and does not send email. Returns generic `200 OK` identical response.
+     - **Existing Account**: Generates cryptographically secure 6-digit OTP (`crypto.randomInt`). Computes HMAC-SHA256 hash. Persists hashed state in Redis (`auth:otp:reset:<email>`, TTL: 300s). Sets cooldown (60s) and increments hourly rate counter (max 3/hr). Dispatches reset email via `emailService.sendPasswordResetOtp`.
+  7. **Fail-Safe Cleanup**: If email dispatch fails, deletes the stored OTP from Redis and throws internal error.
+  8. Returns generic success envelope: `{ success: true, message: "If an account exists with this email, a reset code has been sent.", data: null, meta: null }`.
+- **Sprint Boundaries**: Sprint 2.12 implements reset initiation only; password verification and updates are reserved for Sprint 2.13.
 - **Sprint Task**: Sprint 2.12 (Forgot Password).
 
 ### SD-05: Reset Password

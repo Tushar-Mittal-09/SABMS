@@ -78,17 +78,19 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 ├───────────────────────┬───────────────────────────────────────────────────┤
 │ Format                │ 6-digit numeric string (000000 – 999999)          │
 │ Generation Primitive  │ crypto.randomInt(0, 1000000).padStart(6, '0')     │
-│ Lifespan (TTL)        │ 10 Minutes (600 seconds)                          │
+│ Lifespan (TTL)        │ 10 Minutes (600s) [Registration/Phone] / 5 Minutes (300s) [Password Reset] │
 │ Email Storage Key     │ Redis ephemeral key: auth:otp:email:<email>       │
 │ Phone Storage Key     │ Redis ephemeral key: auth:otp:phone:<phone>       │
-│ Cooldown Keys         │ auth:otp:cooldown:<email> / auth:otp:phone:cooldown:<phone> │
-│ Resend Keys           │ auth:otp:resend:<email> / auth:otp:phone:resend:<phone>   │
+│ Password Reset Key    │ Redis ephemeral key: auth:otp:reset:<email>       │
+│ Cooldown Keys         │ auth:otp:cooldown:<email> / auth:otp:phone:cooldown:<phone> / auth:otp:reset:cooldown:<email> │
+│ Resend / Rate Keys    │ auth:otp:resend:<email> / auth:otp:phone:resend:<phone> / auth:otp:reset:rate:<email> │
 │ Stored Value          │ HMAC-SHA256 Hash (Plaintext NEVER stored)         │
 │ Verification Attempts │ Maximum 5 attempts (Invalidated on 5th failure)   │
-│ Resend Throttling     │ Minimum 60s cooldown; Maximum 5 resends per OTP   │
+│ Resend / Rate Limit   │ Registration: Min 60s cooldown, max 5 resends; Reset: Min 60s cooldown, max 3/hr │
 │ Post-Verification     │ Keys immediately deleted upon successful match    │
 │ State Transition      │ Email OTP: isEmailVerified=true, status=ACTIVE    │
 │                       │ Phone OTP: isPhoneVerified=true (status unchanged)│
+│                       │ Reset OTP: Password reset authorization (Sprint 2.13) │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -127,13 +129,14 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 
 ## 6. Rate Limiting & Account Lockout Strategy
 
-| Target Endpoint                    | Rate Limit Policy            | Redis Key / Scope | Exceeded Behavior                                          |
-| :--------------------------------- | :--------------------------- | :---------------- | :--------------------------------------------------------- |
-| **`POST /api/v1/auth/login`**      | 5 failed attempts per 15 min | `lockout:<email>` | Account locked for 15 min; returns `429 Too Many Requests` |
-| **`POST /api/v1/auth/register`**   | 10 requests per hour         | `rl:reg:<ip>`     | Rejects with `429 Too Many Requests`                       |
-| **`POST /api/v1/auth/resend-otp`** | 1 request per 60s; max 3/hr  | `otp:resend:<id>` | Rejects with `429 Cooldown Active`                         |
-| **`POST /api/v1/auth/verify-*`**   | 5 attempts per OTP lifespan  | `otp:<type>:<id>` | Invalidation of OTP code on 5th failure                    |
-| **Global Auth Endpoints**          | 100 requests per 15 min      | `rl:auth:ip:<ip>` | Global Express rate limiter throttle                       |
+| Target Endpoint                         | Rate Limit Policy            | Redis Key / Scope                                                 | Exceeded Behavior                                          |
+| :-------------------------------------- | :--------------------------- | :---------------------------------------------------------------- | :--------------------------------------------------------- |
+| **`POST /api/v1/auth/login`**           | 5 failed attempts per 15 min | `lockout:<email>`                                                 | Account locked for 15 min; returns `429 Too Many Requests` |
+| **`POST /api/v1/auth/register`**        | 10 requests per hour         | `rl:reg:<ip>`                                                     | Rejects with `429 Too Many Requests`                       |
+| **`POST /api/v1/auth/resend-otp`**      | 1 request per 60s; max 3/hr  | `otp:resend:<id>`                                                 | Rejects with `429 Cooldown Active`                         |
+| **`POST /api/v1/auth/forgot-password`** | 1 request per 60s; max 3/hr  | `auth:otp:reset:cooldown:<email>` / `auth:otp:reset:rate:<email>` | Generic `429 Too Many Requests` (Zero Enumeration)         |
+| **`POST /api/v1/auth/verify-*`**        | 5 attempts per OTP lifespan  | `otp:<type>:<id>`                                                 | Invalidation of OTP code on 5th failure                    |
+| **Global Auth Endpoints**               | 100 requests per 15 min      | `rl:auth:ip:<ip>`                                                 | Global Express rate limiter throttle                       |
 
 ---
 

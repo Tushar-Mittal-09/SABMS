@@ -179,6 +179,24 @@ class AuthController {
 
     return res.success(null, 'Logged out successfully');
   });
+
+  /**
+   * Password Reset Initiation Endpoint Handler (Sprint 2.12).
+   * POST /api/v1/auth/forgot-password
+   *
+   * Security Boundaries:
+   * - Validates email strictly via forgotPasswordSchema.
+   * - Returns identical HTTP 200 generic message for both existing and non-existing accounts.
+   * - Never exposes user existence, registration status, OTP, or Redis state.
+   */
+  forgotPassword = catchAsync(async (req, res) => {
+    const { email } = req.body;
+    await authService.forgotPassword(email);
+    return res.success(
+      null,
+      'If an account exists with this email, a reset code has been sent.'
+    );
+  });
 }
 
 const authControllerInstance = new AuthController();

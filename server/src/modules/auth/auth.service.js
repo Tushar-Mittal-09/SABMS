@@ -20,6 +20,11 @@ const {
   PHONE_OTP_RESEND_COOLDOWN_SECONDS,
   PHONE_OTP_MAX_ATTEMPTS,
   PHONE_OTP_MAX_RESENDS,
+  PASSWORD_RESET_OTP_LENGTH,
+  PASSWORD_RESET_OTP_TTL_SECONDS,
+  PASSWORD_RESET_OTP_COOLDOWN_SECONDS,
+  PASSWORD_RESET_OTP_MAX_REQUESTS,
+  PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS,
   REFRESH_TOKEN_STATUSES,
   REFRESH_TOKEN_REVOCATION_REASONS,
   JWT_POLICY,
@@ -29,8 +34,10 @@ const {
   normalizePhone,
   generateEmailOtp,
   generatePhoneOtp,
+  generatePasswordResetOtp,
   hashEmailOtp,
   hashPhoneOtp,
+  hashPasswordResetOtp,
   verifyEmailOtpHash,
   verifyPhoneOtpHash,
   generateAccessToken,
@@ -1046,6 +1053,151 @@ class AuthService {
     });
 
     return { loggedOut: true };
+  }
+
+  /**
+   * Initiates the password recovery flow (Sprint 2.12).
+   *
+   * Security & Anti-Enumeration Invariants:
+   * - Normalizes the email address consistently before any lookup.
+   * - Applies transient cooldown and rate limiting across all candidate emails.
+   * - Does NOT expose whether the account exists in database or Redis.
+   * - If user exists: generates cryptographically secure 6-digit OTP, computes HMAC-SHA256 hash,
+   *   stores ONLY the hashed OTP in Redis (`auth:otp:reset:<email>`) with 5m TTL,
+   *   records cooldown & rate counters, and dispatches the OTP via emailService.
+   * - If user does NOT exist: records cooldown & rate counters in Redis, does NOT send email,
+   *   does NOT create reset OTP state, and returns successful result identically.
+   * - If email dispatch fails: immediately cleans up the stored reset OTP from Redis and throws
+   *   a safe internal error without leaking credentials, OTPs, or database/Redis keys.
+   * - Never returns or logs the plaintext OTP.
+   * - Never mutates user passwords or sessions.
+   *
+   * @param {string} email - Candidate user email address.
+   * @returns {Promise<{ success: boolean }>} Generic success result.
+   */
+  async forgotPassword(email) {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) {
+      throw AppError.badRequest('Valid email address is required');
+    }
+
+    // 1. Check transient request cooldown in Redis
+    const { inCooldown } =
+      await this._authRepository.getPasswordResetCooldown(normalizedEmail);
+    if (inCooldown) {
+      throw AppError.tooManyRequests(
+        'Too many password reset requests. Please try again later.'
+      );
+    }
+
+    // 2. Check transient hourly rate limit in Redis
+    const requestCount =
+      await this._authRepository.getPasswordResetRequestCount(normalizedEmail);
+    if (requestCount >= PASSWORD_RESET_OTP_MAX_REQUESTS) {
+      throw AppError.tooManyRequests(
+        'Too many password reset requests. Please try again later.'
+      );
+    }
+
+    // 3. Look up user by normalized email in MongoDB
+    const user = await this._authRepository.findByEmail(normalizedEmail);
+
+    // 4. Non-existing account branch: enforce cooldown/rate limit without leaking account state
+    if (!user) {
+      try {
+        await Promise.all([
+          this._authRepository.setPasswordResetCooldown(
+            normalizedEmail,
+            PASSWORD_RESET_OTP_COOLDOWN_SECONDS
+          ),
+          this._authRepository.incrementPasswordResetRequestCount(
+            normalizedEmail,
+            PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS
+          ),
+        ]);
+      } catch (redisError) {
+        logger.error(
+          `Redis operation failed during forgot password: ${redisError.message}`,
+          { context: 'AuthService' }
+        );
+        throw AppError.internal('Temporary service error. Please try again.');
+      }
+
+      logger.info('Password reset requested for non-existent account', {
+        context: 'AuthService',
+      });
+
+      return { success: true };
+    }
+
+    // 5. Existing account branch: generate secure 6-digit numeric OTP
+    const otp = generatePasswordResetOtp(PASSWORD_RESET_OTP_LENGTH);
+
+    // 6. Compute HMAC-SHA256 hash (never persist plaintext OTP)
+    const otpHash = hashPasswordResetOtp(otp);
+
+    const now = new Date();
+    const expiresAt = new Date(
+      now.getTime() + PASSWORD_RESET_OTP_TTL_SECONDS * 1000
+    ).toISOString();
+
+    const otpData = {
+      otpHash,
+      attempts: 0,
+      createdAt: now.toISOString(),
+      expiresAt,
+    };
+
+    // 7. Store hashed OTP and update cooldown/rate counters in Redis
+    try {
+      await Promise.all([
+        this._authRepository.storePasswordResetOtp(
+          normalizedEmail,
+          otpData,
+          PASSWORD_RESET_OTP_TTL_SECONDS
+        ),
+        this._authRepository.setPasswordResetCooldown(
+          normalizedEmail,
+          PASSWORD_RESET_OTP_COOLDOWN_SECONDS
+        ),
+        this._authRepository.incrementPasswordResetRequestCount(
+          normalizedEmail,
+          PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS
+        ),
+      ]);
+    } catch (redisError) {
+      logger.error(
+        `Redis operation failed during forgot password: ${redisError.message}`,
+        { context: 'AuthService' }
+      );
+      throw AppError.internal('Temporary service error. Please try again.');
+    }
+
+    // 8. Dispatch password reset OTP email
+    const emailResult = await this._emailService.sendPasswordResetOtp({
+      to: normalizedEmail,
+      name: user.name,
+      otp,
+    });
+
+    if (!emailResult.success) {
+      // Clean up stored OTP state in Redis so no orphan/unusable OTP remains active
+      await this._authRepository.deletePasswordResetOtp(normalizedEmail);
+      logger.error('Failed to dispatch password reset email', {
+        context: 'AuthService',
+        recipient: normalizedEmail,
+      });
+      throw AppError.internal(
+        'Failed to process password reset request. Please try again.'
+      );
+    }
+
+    logger.info('Password reset OTP dispatched successfully', {
+      context: 'AuthService',
+      recipient: normalizedEmail,
+    });
+
+    return { success: true };
   }
 }
 

@@ -21,6 +21,7 @@ const {
   PASSWORD_RESET_REDIS_RATE_KEY_PREFIX,
   PASSWORD_RESET_OTP_HASH_ALGORITHM,
   JWT_POLICY,
+  SESSION_REDIS_KEY_PREFIX,
 } = require('./auth.constants');
 
 /**
@@ -65,6 +66,99 @@ const extractClientMetadata = (req) => ({
   ip: extractClientIp(req),
   userAgent: extractUserAgent(req),
 });
+
+/**
+ * Extracts a privacy-preserving network subnet from an IP address.
+ * - IPv4: Extracts /24 prefix (e.g. 192.168.1.100 -> 192.168.1.0/24)
+ * - IPv6: Extracts /64 prefix (first 4 segments)
+ * - Localhost (127.0.0.1, ::1): Normalized
+ *
+ * @param {string} ip
+ * @returns {string} Subnet string or 'unknown'
+ */
+const extractSubnet = (ip) => {
+  if (!ip || typeof ip !== 'string' || ip === 'unknown') return 'unknown';
+  let cleanIp = ip.trim();
+
+  // Strip IPv4-mapped IPv6 prefix (e.g. ::ffff:192.168.1.1)
+  if (cleanIp.startsWith('::ffff:')) {
+    cleanIp = cleanIp.slice(7);
+  }
+
+  if (cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp === 'localhost') {
+    return '127.0.0.0/8';
+  }
+
+  // IPv4 handling
+  if (cleanIp.includes('.')) {
+    const parts = cleanIp.split('.');
+    if (parts.length >= 3) {
+      return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+    }
+    return cleanIp;
+  }
+
+  // IPv6 handling
+  if (cleanIp.includes(':')) {
+    const parts = cleanIp.split(':');
+    if (parts.length >= 4) {
+      return `${parts.slice(0, 4).join(':')}::/64`;
+    }
+    return cleanIp;
+  }
+
+  return cleanIp;
+};
+
+/**
+ * Generates a privacy-preserving cryptographic device fingerprint.
+ * Combines network subnet and User-Agent string using SHA-256 HMAC / digest.
+ *
+ * @param {Object} clientMeta
+ * @param {string} [clientMeta.ip]
+ * @param {string} [clientMeta.ipAddress]
+ * @param {string} [clientMeta.userAgent]
+ * @returns {string} 64-character hex SHA-256 fingerprint hash
+ */
+const generateDeviceFingerprint = (clientMeta = {}) => {
+  const ip = clientMeta.ip || clientMeta.ipAddress || 'unknown';
+  const userAgent = (clientMeta.userAgent || 'unknown').trim();
+  const subnet = extractSubnet(ip);
+
+  return crypto
+    .createHash('sha256')
+    .update(`${subnet}|${userAgent}`)
+    .digest('hex');
+};
+
+/**
+ * Validates a candidate client metadata fingerprint against an expected hash using constant-time comparison.
+ *
+ * @param {Object} clientMeta - Candidate client metadata { ip, userAgent }.
+ * @param {string} expectedHash - Stored device fingerprint hash.
+ * @returns {boolean} True if fingerprint matches, false otherwise.
+ */
+const verifyDeviceFingerprint = (clientMeta, expectedHash) => {
+  if (!expectedHash || typeof expectedHash !== 'string') return false;
+  const computedHash = generateDeviceFingerprint(clientMeta);
+
+  const bufExpected = Buffer.from(expectedHash, 'hex');
+  const bufComputed = Buffer.from(computedHash, 'hex');
+
+  if (bufExpected.length !== bufComputed.length) return false;
+  return crypto.timingSafeEqual(bufExpected, bufComputed);
+};
+
+/**
+ * Constructs Redis key for session cache.
+ *
+ * @param {string} sessionId - Unique session or family identifier.
+ * @returns {string} Fully qualified Redis key.
+ */
+const createSessionRedisKey = (sessionId) => {
+  if (!sessionId) return '';
+  return `${SESSION_REDIS_KEY_PREFIX}${sessionId}`;
+};
 
 /**
  * Normalizes email address by trimming whitespace and converting to lowercase.
@@ -390,6 +484,9 @@ const generateAccessToken = (user, options = {}) => {
   const payload = {
     sub: String(userId),
     ...(rawUser.role ? { role: rawUser.role } : {}),
+    ...(options.sessionId || rawUser.sessionId
+      ? { sessionId: options.sessionId || rawUser.sessionId }
+      : {}),
   };
 
   const secret =
@@ -727,4 +824,8 @@ module.exports = {
   verifyRefreshToken,
   decodeRefreshToken,
   getRefreshTokenCookieOptions,
+  extractSubnet,
+  generateDeviceFingerprint,
+  verifyDeviceFingerprint,
+  createSessionRedisKey,
 };

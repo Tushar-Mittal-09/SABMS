@@ -353,11 +353,14 @@ class AppError extends Error {
 - **Workflow**: Automatic: Redis key expires after 15–30 minutes. Manual: Admin executes unlock endpoint clearing Redis lockout key and resetting failure counter.
 - **Sprint Task**: Sprint 2.17 (Rate Limits & Account Lock).
 
-### SD-15: Session Validation
+### SD-15: Session Validation & Device Fingerprinting `[IMPLEMENTED]`
 
-- **Purpose**: Verify active session has not been revoked or hijacked.
-- **Components**: `auth.middleware.js`, `Redis`.
-- **Workflow**: Inspects request `sessionId` → Verifies active session hash in Redis → Validates IP subnet and User-Agent fingerprint → Updates `lastActivityAt` timestamp in Redis.
+- **Purpose**: Verify active session has not been revoked or hijacked via client device fingerprinting.
+- **Components**: `refresh-token.model.js`, `auth.helper.js`, `auth.service.js`, `auth.controller.js`, `auth.routes.js`, `Redis`.
+- **Workflow**:
+  - **Login / Issuance**: Extracts client IP and User-Agent → Generates SHA-256 device fingerprint bound to `/24` subnet and User-Agent → Stores `ipAddress`, `userAgent`, `deviceHash`, and `lastActivityAt` on `RefreshToken` document in MongoDB → Caches active session snapshot in Redis (`auth:session:<familyId>`).
+  - **Rotation / Refresh**: Checks stored `deviceHash` against incoming client metadata → If device mismatch detected, revokes token family and returns `401 Unauthorized` → Updates `lastActivityAt` and replacement token metadata.
+  - **Session Management**: Authenticated users can list active sessions (`GET /api/v1/auth/sessions`), revoke specific sessions (`DELETE /api/v1/auth/sessions/:sessionId`), or revoke all other concurrent sessions (`DELETE /api/v1/auth/sessions`).
 - **Sprint Task**: Sprint 2.16 (Session Security).
 
 ### SD-16: OTP Verification — Email `[CANONICAL]`

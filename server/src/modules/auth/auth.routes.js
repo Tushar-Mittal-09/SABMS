@@ -92,6 +92,16 @@ router.post(
   authController.resendOtp
 );
 
+// ─── Session Security & Management Routes (Sprint 2.16) ───────────────────
+
+router.get('/sessions', authenticate, authController.getSessions);
+router.delete(
+  '/sessions/:sessionId',
+  authenticate,
+  authController.revokeSession
+);
+router.delete('/sessions', authenticate, authController.revokeAllOtherSessions);
+
 module.exports = {
   authRouter: router,
   router,

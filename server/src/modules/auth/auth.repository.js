@@ -12,6 +12,7 @@ const {
   PASSWORD_RESET_OTP_COOLDOWN_SECONDS,
   PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS,
   REFRESH_TOKEN_STATUSES,
+  SESSION_CACHE_TTL_SECONDS,
 } = require('./auth.constants');
 const {
   createOtpRedisKey,
@@ -23,6 +24,7 @@ const {
   createPasswordResetOtpRedisKey,
   createPasswordResetCooldownRedisKey,
   createPasswordResetRateRedisKey,
+  createSessionRedisKey,
   normalizeEmail,
   normalizePhone,
 } = require('./auth.helper');
@@ -59,6 +61,19 @@ class AuthRepository {
    */
   _getRedis() {
     return this._redisClientGetter();
+  }
+
+  /**
+   * Helper to check if Redis is ready or mocked.
+   * Prevents blocking connection delays when Redis is offline in test environments.
+   * @private
+   * @param {any} redis
+   * @returns {boolean}
+   */
+  _isRedisUsable(redis) {
+    if (!redis) return false;
+    if (typeof redis.status !== 'string') return true;
+    return redis.status === 'ready';
   }
 
   // ─── User Persistence Operations (MongoDB) ───────────────────────────
@@ -702,6 +717,7 @@ class AuthRepository {
           status: REFRESH_TOKEN_STATUSES.CONSUMED,
           consumedAt: now,
           replacedByTokenId,
+          lastActivityAt: now,
         },
       },
       { new: true }
@@ -797,6 +813,169 @@ class AuthRepository {
   async getTokensByFamily(familyId) {
     if (!familyId) return [];
     return this._refreshTokenModel.find({ familyId }).sort({ issuedAt: 1 });
+  }
+
+  // ─── Session Security & Management Operations (Sprint 2.16) ───────────
+
+  /**
+   * Stores active session cache in Redis for rapid session validation.
+   *
+   * @param {string} sessionId - Session or family identifier.
+   * @param {Object} sessionData - Session payload.
+   * @param {number} [ttlSeconds=SESSION_CACHE_TTL_SECONDS]
+   * @returns {Promise<'OK'|boolean>}
+   */
+  async storeSessionCache(
+    sessionId,
+    sessionData,
+    ttlSeconds = SESSION_CACHE_TTL_SECONDS
+  ) {
+    if (!sessionId) return false;
+    const redis = this._getRedis();
+    if (!this._isRedisUsable(redis)) return false;
+    const key = createSessionRedisKey(sessionId);
+    return redis.set(key, JSON.stringify(sessionData), 'EX', ttlSeconds);
+  }
+
+  /**
+   * Retrieves active session cache from Redis.
+   *
+   * @param {string} sessionId
+   * @returns {Promise<Object|null>}
+   */
+  async getSessionCache(sessionId) {
+    if (!sessionId) return null;
+    const redis = this._getRedis();
+    if (!this._isRedisUsable(redis)) return null;
+    const key = createSessionRedisKey(sessionId);
+    const data = await redis.get(key);
+    if (!data) return null;
+    try {
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Removes session cache from Redis immediately upon revocation/logout.
+   *
+   * @param {string} sessionId
+   * @returns {Promise<number>}
+   */
+  async deleteSessionCache(sessionId) {
+    if (!sessionId) return 0;
+    const redis = this._getRedis();
+    if (!this._isRedisUsable(redis)) return 0;
+    const key = createSessionRedisKey(sessionId);
+    return redis.del(key);
+  }
+
+  /**
+   * Updates lastActivityAt timestamp in Redis session cache if active.
+   *
+   * @param {string} sessionId
+   * @param {Date} [now=new Date()]
+   * @returns {Promise<boolean>}
+   */
+  async updateSessionCacheActivity(sessionId, now = new Date()) {
+    if (!sessionId) return false;
+    const redis = this._getRedis();
+    if (!this._isRedisUsable(redis)) return false;
+    const cached = await this.getSessionCache(sessionId);
+    if (!cached) return false;
+    cached.lastActivityAt = now.toISOString();
+    const key = createSessionRedisKey(sessionId);
+    const ttl = await redis.ttl(key);
+    if (ttl > 0) {
+      await redis.set(key, JSON.stringify(cached), 'EX', ttl);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Retrieves all active sessions (active refresh tokens) for a given user.
+   *
+   * @param {string|import('mongoose').Types.ObjectId} userId
+   * @returns {Promise<Array<import('mongoose').Document>>}
+   */
+  async getActiveSessionsByUserId(userId) {
+    if (!userId) return [];
+    return this._refreshTokenModel
+      .find({
+        userId,
+        status: REFRESH_TOKEN_STATUSES.ACTIVE,
+        expiresAt: { $gt: new Date() },
+      })
+      .sort({ lastActivityAt: -1, issuedAt: -1 });
+  }
+
+  /**
+   * Revokes an active session family for a specific user.
+   *
+   * @param {string|import('mongoose').Types.ObjectId} userId
+   * @param {string} familyId
+   * @param {string} [reason='Session revoked by user']
+   * @param {Date} [revokedAt=new Date()]
+   * @returns {Promise<import('mongodb').UpdateResult>}
+   */
+  async revokeSessionByFamilyId(
+    userId,
+    familyId,
+    reason = 'Session revoked by user',
+    revokedAt = new Date()
+  ) {
+    if (!userId || !familyId) return { modifiedCount: 0 };
+    await this.deleteSessionCache(familyId);
+    return this._refreshTokenModel.updateMany(
+      {
+        userId,
+        familyId,
+        status: { $ne: REFRESH_TOKEN_STATUSES.REUSED },
+      },
+      {
+        $set: {
+          status: REFRESH_TOKEN_STATUSES.REVOKED,
+          revokedAt,
+          revokedReason: reason,
+        },
+      }
+    );
+  }
+
+  /**
+   * Revokes all active sessions for a user EXCEPT the specified current session family.
+   *
+   * @param {string|import('mongoose').Types.ObjectId} userId
+   * @param {string} currentFamilyId
+   * @param {string} [reason='All other sessions revoked by user']
+   * @param {Date} [revokedAt=new Date()]
+   * @returns {Promise<import('mongodb').UpdateResult>}
+   */
+  async revokeAllUserSessionsExcept(
+    userId,
+    currentFamilyId,
+    reason = 'All other sessions revoked by user',
+    revokedAt = new Date()
+  ) {
+    if (!userId) return { modifiedCount: 0 };
+    const query = {
+      userId,
+      status: {
+        $nin: [REFRESH_TOKEN_STATUSES.REVOKED, REFRESH_TOKEN_STATUSES.REUSED],
+      },
+    };
+    if (currentFamilyId) {
+      query.familyId = { $ne: currentFamilyId };
+    }
+    return this._refreshTokenModel.updateMany(query, {
+      $set: {
+        status: REFRESH_TOKEN_STATUSES.REVOKED,
+        revokedAt,
+        revokedReason: reason,
+      },
+    });
   }
 }
 

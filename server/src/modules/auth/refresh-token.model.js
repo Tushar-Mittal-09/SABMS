@@ -73,6 +73,26 @@ const refreshTokenSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    ipAddress: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    userAgent: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    deviceHash: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
+    lastActivityAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
   {
     timestamps: true,
@@ -99,6 +119,7 @@ refreshTokenSchema.index({ userId: 1 });
 refreshTokenSchema.index({ status: 1 });
 refreshTokenSchema.index({ familyId: 1, status: 1 });
 refreshTokenSchema.index({ userId: 1, status: 1 });
+refreshTokenSchema.index({ userId: 1, status: 1, expiresAt: 1 });
 refreshTokenSchema.index({ expiresAt: 1 });
 
 const RefreshToken =

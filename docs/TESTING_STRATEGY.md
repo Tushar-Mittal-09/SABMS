@@ -91,6 +91,17 @@
 - [ ] `TC-AUTH-052`: Access protected endpoint with missing token returns `401 Unauthorized` (`AUTH_TOKEN_MISSING`).
 - [ ] `TC-AUTH-053`: Access admin endpoint with STUDENT role returns `403 Forbidden` (`AUTH_FORBIDDEN_ROLE`).
 
+### 3.7 Session Security & Device Fingerprinting Tests (Sprint 2.16)
+
+- [x] `TC-AUTH-060`: Extract /24 IPv4 and /64 IPv6 subnets; normalize localhost (`auth.session-security.test.js`) (Sprint 2.16).
+- [x] `TC-AUTH-061`: Generate deterministic, privacy-preserving SHA-256 device fingerprint bound to subnet and User-Agent (`auth.session-security.test.js`) (Sprint 2.16).
+- [x] `TC-AUTH-062`: Persist session metadata (`ipAddress`, `userAgent`, `deviceHash`, `lastActivityAt`) in `RefreshToken` collection and Redis cache (`auth.session-security.test.js`) (Sprint 2.16).
+- [x] `TC-AUTH-063`: Mitigate session hijacking: refresh token rotation succeeds across same subnet; fails with 401 and revokes family upon device mismatch (`auth.session-security.test.js`) (Sprint 2.16).
+- [x] `TC-AUTH-064`: `GET /api/v1/auth/sessions` lists active concurrent sessions with `isCurrent` determination (`auth.session-security.test.js`) (Sprint 2.16).
+- [x] `TC-AUTH-065`: `DELETE /api/v1/auth/sessions/:sessionId` revokes specific session and clears cookie if current (`auth.session-security.test.js`) (Sprint 2.16).
+- [x] `TC-AUTH-066`: `DELETE /api/v1/auth/sessions` revokes all other concurrent sessions for authenticated user (`auth.session-security.test.js`) (Sprint 2.16).
+- [x] `TC-AUTH-067`: SD-15 session validation verifies active session state and device fingerprint (`auth.session-security.test.js`) (Sprint 2.16).
+
 ---
 
 ## 4. Continuous Integration Quality Gates

@@ -619,6 +619,34 @@
   }
   ```
 
+#### `DELETE /api/v1/auth/sessions/:sessionId`
+
+- **Description**: Revokes a specific active session by its session ID.
+- **Access**: Authenticated (`Bearer <accessToken>`)
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Session revoked successfully.",
+    "data": null,
+    "meta": null
+  }
+  ```
+
+#### `DELETE /api/v1/auth/sessions`
+
+- **Description**: Revokes all active concurrent sessions for the authenticated user except the current session ("Logout from other devices").
+- **Access**: Authenticated (`Bearer <accessToken>`)
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "All other sessions revoked successfully.",
+    "data": null,
+    "meta": null
+  }
+  ```
+
 ---
 
 ### 4.3 Users Endpoints (`/api/v1/users`)

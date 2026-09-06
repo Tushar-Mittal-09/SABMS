@@ -47,6 +47,8 @@ const {
   verifyRefreshToken,
   generateJti,
   generateFamilyId,
+  generateDeviceFingerprint,
+  verifyDeviceFingerprint,
 } = require('./auth.helper');
 const config = require('../../config/env.config');
 const AppError = require('../../core/errors/AppError');
@@ -667,10 +669,11 @@ class AuthService {
    * @param {Object} credentials - Validated login input.
    * @param {string} credentials.email - User email.
    * @param {string} credentials.password - Raw plaintext password candidate.
+   * @param {Object} [clientMeta={}] - Request client metadata (ip, userAgent) for session security.
    * @returns {Promise<Object>} Authenticated user payload with tokens.
    * @throws {AppError} 401 Unauthorized on invalid credentials, 403 Forbidden on disabled/unverified account.
    */
-  async login({ email, password }) {
+  async login({ email, password }, clientMeta = {}) {
     // 1. Normalize email address
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail || !password || typeof password !== 'string') {
@@ -719,13 +722,23 @@ class AuthService {
 
     const resultUser = updatedUser || user;
 
-    // 7. Initialize a brand-new token family & persistent token record (Sprint 2.10)
+    // 7. Initialize a brand-new token family & persistent token record (Sprint 2.10 & Sprint 2.16)
     const familyId = generateFamilyId();
     const jti = generateJti();
     const refreshExpiresAt = new Date(
       Date.now() +
         (JWT_POLICY.REFRESH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000)
     );
+
+    const clientIp = clientMeta?.ip || clientMeta?.ipAddress || null;
+    const clientUserAgent = clientMeta?.userAgent || null;
+    const deviceHash =
+      clientIp || clientUserAgent
+        ? generateDeviceFingerprint({
+            ip: clientIp,
+            userAgent: clientUserAgent,
+          })
+        : null;
 
     await this._authRepository.createRefreshToken({
       jti,
@@ -734,7 +747,28 @@ class AuthService {
       status: REFRESH_TOKEN_STATUSES.ACTIVE,
       issuedAt: new Date(),
       expiresAt: refreshExpiresAt,
+      ipAddress: clientIp,
+      userAgent: clientUserAgent,
+      deviceHash,
+      lastActivityAt: new Date(),
     });
+
+    // Optionally cache session in Redis for SD-15 session validation
+    try {
+      await this._authRepository.storeSessionCache(familyId, {
+        userId: String(resultUser._id || resultUser.id),
+        familyId,
+        ipAddress: clientIp,
+        userAgent: clientUserAgent,
+        deviceHash,
+        lastActivityAt: new Date().toISOString(),
+      });
+    } catch (cacheErr) {
+      logger.warn(
+        `Failed to store session cache in Redis: ${cacheErr.message}`,
+        { context: 'AuthService' }
+      );
+    }
 
     // 8. Generate cryptographically signed JWT access token & refresh token
     const accessToken = generateAccessToken(resultUser);
@@ -790,10 +824,11 @@ class AuthService {
    * 10. Return sanitized result containing new access token, replacement refresh token, and user profile.
    *
    * @param {string} refreshToken - Raw refresh token extracted from HttpOnly cookie.
+   * @param {Object} [clientMeta={}] - Request client metadata (ip, userAgent) for session security.
    * @returns {Promise<Object>} Object containing new accessToken, replacement refreshToken, tokenType, expiresIn, and user entity.
    * @throws {AppError} 401 Unauthorized on invalid/expired/reused token, 403 Forbidden on disabled/unverified account.
    */
-  async refreshAccessToken(refreshToken) {
+  async refreshAccessToken(refreshToken, clientMeta = {}) {
     if (!refreshToken || typeof refreshToken !== 'string') {
       throw AppError.unauthorized('Refresh token is required.');
     }
@@ -861,7 +896,40 @@ class AuthService {
       );
     }
 
-    // 4. Reuse Detection: Check if token has already been consumed or replayed
+    // 4. Session Security & Device Fingerprint Validation (Sprint 2.16)
+    // If the token is bound to a device fingerprint and client metadata is supplied,
+    // verify consistency to prevent session hijacking via exfiltrated refresh tokens.
+    if (
+      storedToken.deviceHash &&
+      clientMeta &&
+      (clientMeta.ip || clientMeta.ipAddress || clientMeta.userAgent)
+    ) {
+      const isDeviceValid = verifyDeviceFingerprint(
+        clientMeta,
+        storedToken.deviceHash
+      );
+      if (!isDeviceValid) {
+        logger.warn(
+          `Session device mismatch detected during refresh for user: ${expectedUserId}`,
+          {
+            context: 'AuthService',
+            userId: expectedUserId,
+            familyId,
+            event: 'SESSION_DEVICE_MISMATCH',
+          }
+        );
+        await this._authRepository.revokeTokenFamily(
+          familyId,
+          REFRESH_TOKEN_REVOCATION_REASONS.SESSION_DEVICE_MISMATCH ||
+            'Session device mismatch detected'
+        );
+        throw AppError.unauthorized(
+          'Session validation failed. Device mismatch detected. Please log in again.'
+        );
+      }
+    }
+
+    // 5. Reuse Detection: Check if token has already been consumed or replayed
     if (
       storedToken.status === REFRESH_TOKEN_STATUSES.CONSUMED ||
       storedToken.status === REFRESH_TOKEN_STATUSES.REUSED
@@ -908,7 +976,7 @@ class AuthService {
       );
     }
 
-    // 5. Prepare replacement refresh token in the SAME family
+    // 6. Prepare replacement refresh token in the SAME family
     const newJti = generateJti();
     const newRefreshToken = generateRefreshToken(user, {
       jti: newJti,
@@ -919,7 +987,7 @@ class AuthService {
         (JWT_POLICY.REFRESH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000)
     );
 
-    // 6. Atomically consume the old token (ensures race-condition safety)
+    // 7. Atomically consume the old token (ensures race-condition safety)
     const consumedOldToken = await this._authRepository.consumeRefreshToken(
       jti,
       familyId,
@@ -951,7 +1019,20 @@ class AuthService {
       );
     }
 
-    // 7. Persist replacement token as ACTIVE in MongoDB
+    // 8. Persist replacement token as ACTIVE in MongoDB (Sprint 2.10 & Sprint 2.16)
+    const clientIp =
+      clientMeta?.ip || clientMeta?.ipAddress || storedToken.ipAddress || null;
+    const clientUserAgent =
+      clientMeta?.userAgent || storedToken.userAgent || null;
+    const replacementDeviceHash =
+      storedToken.deviceHash ||
+      (clientIp || clientUserAgent
+        ? generateDeviceFingerprint({
+            ip: clientIp,
+            userAgent: clientUserAgent,
+          })
+        : null);
+
     await this._authRepository.createRefreshToken({
       jti: newJti,
       familyId,
@@ -959,9 +1040,30 @@ class AuthService {
       status: REFRESH_TOKEN_STATUSES.ACTIVE,
       issuedAt: new Date(),
       expiresAt: newExpiresAt,
+      ipAddress: clientIp,
+      userAgent: clientUserAgent,
+      deviceHash: replacementDeviceHash,
+      lastActivityAt: new Date(),
     });
 
-    // 8. Generate fresh cryptographically signed JWT access token
+    // Update session cache in Redis
+    try {
+      await this._authRepository.storeSessionCache(familyId, {
+        userId: String(user._id || user.id),
+        familyId,
+        ipAddress: clientIp,
+        userAgent: clientUserAgent,
+        deviceHash: replacementDeviceHash,
+        lastActivityAt: new Date().toISOString(),
+      });
+    } catch (cacheErr) {
+      logger.warn(
+        `Failed to update session cache in Redis: ${cacheErr.message}`,
+        { context: 'AuthService' }
+      );
+    }
+
+    // 9. Generate fresh cryptographically signed JWT access token
     const accessToken = generateAccessToken(user);
 
     logger.info(
@@ -1048,6 +1150,12 @@ class AuthService {
       targetFamilyId,
       revocationReason
     );
+
+    try {
+      await this._authRepository.deleteSessionCache(targetFamilyId);
+    } catch {
+      // safe fallback
+    }
 
     logger.info('User logged out successfully', {
       context: 'AuthService',
@@ -1544,6 +1652,150 @@ class AuthService {
       await this.sendPhoneVerificationOtp(user);
       return { type: 'phone', recipient: normalizedPhone };
     }
+  }
+
+  // ─── Session Security & Management (Sprint 2.16) ─────────────────────────
+
+  /**
+   * Retrieves all active concurrent sessions for the authenticated user.
+   *
+   * @param {string|import('mongoose').Types.ObjectId} userId
+   * @param {string} [currentFamilyId=null] - Currently used session/familyId.
+   * @returns {Promise<Array<Object>>} List of active session metadata objects.
+   */
+  async getUserSessions(userId, currentFamilyId = null) {
+    if (!userId) {
+      throw AppError.badRequest('User ID is required.');
+    }
+
+    const activeTokens =
+      await this._authRepository.getActiveSessionsByUserId(userId);
+
+    return activeTokens.map((token) => ({
+      sessionId: token.familyId,
+      ipAddress: token.ipAddress || 'unknown',
+      userAgent: token.userAgent || 'unknown',
+      isCurrent: Boolean(currentFamilyId && token.familyId === currentFamilyId),
+      createdAt: token.issuedAt || token.createdAt,
+      lastActivityAt: token.lastActivityAt || token.issuedAt || token.createdAt,
+    }));
+  }
+
+  /**
+   * Revokes a specific active session by its sessionId (familyId).
+   *
+   * @param {string|import('mongoose').Types.ObjectId} userId - Target user identifier.
+   * @param {string} sessionId - Session / token family identifier.
+   * @returns {Promise<{ revoked: boolean }>}
+   */
+  async revokeSession(userId, sessionId) {
+    if (!userId || !sessionId) {
+      throw AppError.badRequest('User ID and Session ID are required.');
+    }
+
+    const result = await this._authRepository.revokeSessionByFamilyId(
+      userId,
+      sessionId,
+      REFRESH_TOKEN_REVOCATION_REASONS.SESSION_REVOKED ||
+        'Session revoked by user'
+    );
+
+    if (!result || result.modifiedCount === 0) {
+      throw AppError.notFound('Session not found or already terminated.');
+    }
+
+    logger.info(`Session revoked: ${sessionId} for user: ${userId}`, {
+      context: 'AuthService',
+      userId: String(userId),
+      sessionId,
+    });
+
+    return { revoked: true };
+  }
+
+  /**
+   * Revokes all active sessions for a user EXCEPT the current session.
+   *
+   * @param {string|import('mongoose').Types.ObjectId} userId
+   * @param {string} [currentFamilyId=null]
+   * @returns {Promise<{ revokedCount: number }>}
+   */
+  async revokeAllOtherSessions(userId, currentFamilyId = null) {
+    if (!userId) {
+      throw AppError.badRequest('User ID is required.');
+    }
+
+    const result = await this._authRepository.revokeAllUserSessionsExcept(
+      userId,
+      currentFamilyId,
+      REFRESH_TOKEN_REVOCATION_REASONS.ALL_OTHER_SESSIONS_REVOKED ||
+        'All other sessions revoked by user'
+    );
+
+    logger.info(
+      `Revoked ${result.modifiedCount} other sessions for user: ${userId}`,
+      {
+        context: 'AuthService',
+        userId: String(userId),
+        currentFamilyId,
+      }
+    );
+
+    return { revokedCount: result.modifiedCount || 0 };
+  }
+
+  /**
+   * Validates active session state and device fingerprint consistency (SD-15).
+   *
+   * @param {Object} params
+   * @param {string} params.sessionId - Target session ID (familyId).
+   * @param {string} [params.ip] - Client IP address.
+   * @param {string} [params.userAgent] - Client User-Agent.
+   * @returns {Promise<{ valid: boolean, reason?: string }>}
+   */
+  async validateSession({ sessionId, ip, userAgent }) {
+    if (!sessionId) {
+      return { valid: false, reason: 'MISSING_SESSION_ID' };
+    }
+
+    // 1. Check Redis session cache
+    let cached = await this._authRepository.getSessionCache(sessionId);
+
+    // 2. If not in cache, fallback to database lookup
+    if (!cached) {
+      const dbTokens = await this._authRepository.getTokensByFamily(sessionId);
+      const activeToken = dbTokens.find(
+        (t) => t.status === REFRESH_TOKEN_STATUSES.ACTIVE
+      );
+      if (!activeToken || new Date(activeToken.expiresAt) <= new Date()) {
+        return { valid: false, reason: 'SESSION_EXPIRED_OR_REVOKED' };
+      }
+      cached = {
+        userId: String(activeToken.userId),
+        familyId: activeToken.familyId,
+        ipAddress: activeToken.ipAddress,
+        userAgent: activeToken.userAgent,
+        deviceHash: activeToken.deviceHash,
+        lastActivityAt: activeToken.lastActivityAt || new Date().toISOString(),
+      };
+      await this._authRepository.storeSessionCache(sessionId, cached);
+    }
+
+    // 3. Verify device fingerprint consistency
+    if (cached.deviceHash && (ip || userAgent)) {
+      const isDeviceMatch = verifyDeviceFingerprint(
+        { ip, userAgent },
+        cached.deviceHash
+      );
+      if (!isDeviceMatch) {
+        return { valid: false, reason: 'DEVICE_FINGERPRINT_MISMATCH' };
+      }
+    }
+
+    // 4. Update lastActivityAt
+    await this._authRepository.updateSessionCacheActivity(sessionId);
+
+    return { valid: true };
   }
 }
 

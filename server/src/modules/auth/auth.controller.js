@@ -5,7 +5,11 @@ const AppError = require('../../core/errors/AppError');
 const catchAsync = require('../../shared/utils/catchAsync');
 const authService = require('./auth.service');
 const { COOKIE_KEYS } = require('./auth.constants');
-const { getRefreshTokenCookieOptions } = require('./auth.helper');
+const {
+  getRefreshTokenCookieOptions,
+  extractClientMetadata,
+  decodeRefreshToken,
+} = require('./auth.helper');
 const {
   formatRegistrationResponse,
   formatVerifyEmailResponse,
@@ -88,7 +92,8 @@ class AuthController {
    * POST /api/v1/auth/login
    */
   login = catchAsync(async (req, res) => {
-    const loginResult = await authService.login(req.body);
+    const clientMeta = extractClientMetadata(req);
+    const loginResult = await authService.login(req.body, clientMeta);
     const user = loginResult.user || loginResult;
 
     // Issue HttpOnly Refresh Token Cookie (Sprint 2.9)
@@ -129,7 +134,11 @@ class AuthController {
     }
 
     try {
-      const refreshResult = await authService.refreshAccessToken(refreshToken);
+      const clientMeta = extractClientMetadata(req);
+      const refreshResult = await authService.refreshAccessToken(
+        refreshToken,
+        clientMeta
+      );
       const user = refreshResult.user || refreshResult;
 
       // Replace HttpOnly Refresh Token Cookie with newly rotated token (Sprint 2.10)
@@ -254,6 +263,76 @@ class AuthController {
       phone,
     });
     return res.success(result, 'Verification code sent successfully');
+  });
+
+  /**
+   * Active Sessions Listing Endpoint Handler (Sprint 2.16).
+   * GET /api/v1/auth/sessions
+   */
+  getSessions = catchAsync(async (req, res) => {
+    const userId = req.user?.id || req.user?.sub;
+    const cookieName =
+      config.jwt?.refreshCookieName || COOKIE_KEYS.REFRESH_TOKEN;
+    const currentRefreshToken =
+      req.cookies?.[cookieName] || req.signedCookies?.[cookieName];
+
+    let currentFamilyId = null;
+    if (currentRefreshToken) {
+      const decoded = decodeRefreshToken(currentRefreshToken);
+      currentFamilyId = decoded?.familyId || null;
+    }
+
+    const sessions = await authService.getUserSessions(userId, currentFamilyId);
+
+    return res.success(sessions, 'Active sessions retrieved.');
+  });
+
+  /**
+   * Specific Session Revocation Endpoint Handler (Sprint 2.16).
+   * DELETE /api/v1/auth/sessions/:sessionId
+   */
+  revokeSession = catchAsync(async (req, res) => {
+    const userId = req.user?.id || req.user?.sub;
+    const { sessionId } = req.params;
+
+    await authService.revokeSession(userId, sessionId);
+
+    // If revoking currently active refresh token session, clear cookie
+    const cookieName =
+      config.jwt?.refreshCookieName || COOKIE_KEYS.REFRESH_TOKEN;
+    const currentRefreshToken =
+      req.cookies?.[cookieName] || req.signedCookies?.[cookieName];
+    if (currentRefreshToken) {
+      const decoded = decodeRefreshToken(currentRefreshToken);
+      if (decoded?.familyId === sessionId) {
+        const cookieOptions = getRefreshTokenCookieOptions();
+        res.clearCookie(cookieName, cookieOptions);
+      }
+    }
+
+    return res.success(null, 'Session revoked successfully.');
+  });
+
+  /**
+   * Revoke All Other Concurrent Sessions Endpoint Handler (Sprint 2.16).
+   * DELETE /api/v1/auth/sessions
+   */
+  revokeAllOtherSessions = catchAsync(async (req, res) => {
+    const userId = req.user?.id || req.user?.sub;
+    const cookieName =
+      config.jwt?.refreshCookieName || COOKIE_KEYS.REFRESH_TOKEN;
+    const currentRefreshToken =
+      req.cookies?.[cookieName] || req.signedCookies?.[cookieName];
+
+    let currentFamilyId = null;
+    if (currentRefreshToken) {
+      const decoded = decodeRefreshToken(currentRefreshToken);
+      currentFamilyId = decoded?.familyId || null;
+    }
+
+    await authService.revokeAllOtherSessions(userId, currentFamilyId);
+
+    return res.success(null, 'All other sessions revoked successfully.');
   });
 }
 

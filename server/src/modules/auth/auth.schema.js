@@ -140,6 +140,29 @@ const forgotPasswordSchema = z
   })
   .strict();
 
+/**
+ * Reset Password Validation Contract (Sprint 2.13).
+ *
+ * Accepted fields:
+ * - email: valid email (trimmed, lowercased, required)
+ * - otp: exactly 6 numeric digits (required)
+ * - newPassword: valid password adhering to complexity policy (8-128 chars, required)
+ *
+ * Security Boundary:
+ * - Strict schema (.strict()) rejects unknown fields, role tampering, and raw token injection.
+ * - Password is never silently trimmed or mutated.
+ */
+const resetPasswordSchema = z
+  .object({
+    email: email({ required: true }),
+    otp: z
+      .string({ required_error: 'OTP is required' })
+      .trim()
+      .regex(/^\d{6}$/, 'OTP must be exactly 6 numeric digits'),
+    newPassword: password({ required: true }),
+  })
+  .strict();
+
 module.exports = {
   registerSchema,
   verifyEmailSchema,
@@ -148,4 +171,5 @@ module.exports = {
   resendPhoneOtpSchema,
   loginSchema,
   forgotPasswordSchema,
+  resetPasswordSchema,
 };

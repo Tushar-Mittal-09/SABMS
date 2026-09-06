@@ -80,7 +80,7 @@
 
 - [x] `TC-AUTH-040`: `/forgot-password` with valid email dispatches reset OTP and returns `200 OK` (`auth.forgot-password.test.js`) (Sprint 2.12).
 - [x] `TC-AUTH-041`: `/forgot-password` with non-existent email returns `200 OK` (prevents account enumeration) (`auth.forgot-password.test.js`) (Sprint 2.12).
-- [ ] `TC-AUTH-042`: `/reset-password` with valid OTP updates password and terminates all concurrent sessions.
+- [x] `TC-AUTH-042`: `/reset-password` with valid OTP updates password and terminates all concurrent sessions (`auth.reset-password.test.js`) (Sprint 2.13).
 - [ ] `TC-AUTH-043`: `/change-password` with valid current password updates password hash and preserves current session.
 
 ### 3.6 Guard Middleware Tests (Sprint 2.8)

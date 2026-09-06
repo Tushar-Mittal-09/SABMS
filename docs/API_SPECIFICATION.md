@@ -502,6 +502,12 @@
     "meta": null
   }
   ```
+- **Security Boundaries & Invariants (Sprint 2.13)**:
+  - **Argon2id Hashing**: New password strictly validated against complexity policy and hashed via memory-hard Argon2id.
+  - **Zero Plaintext Storage**: Plaintext passwords and OTPs are never persisted, never logged, and never returned.
+  - **Anti-Replay / Invalidation**: Successful reset immediately invalidates the reset OTP and clears all reset state in Redis.
+  - **Failed Attempt Throttling**: Tracks failed verification attempts; upon 5 failed attempts, OTP is permanently deleted from Redis and returns `429 Too Many Requests`.
+  - **Global Session Revocation**: All active refresh token families and sessions belonging to the user are revoked upon password reset.
 
 #### `POST /api/v1/auth/change-password`
 

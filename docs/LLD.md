@@ -227,11 +227,23 @@ class AppError extends Error {
 - **Sprint Boundaries**: Sprint 2.12 implements reset initiation only; password verification and updates are reserved for Sprint 2.13.
 - **Sprint Task**: Sprint 2.12 (Forgot Password).
 
-### SD-05: Reset Password
+### SD-05: Reset Password `[CANONICAL - SPRINT 2.13]`
 
-- **Purpose**: Finalize password update using verified reset OTP.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `user.model.js`, `Redis`, `Email Service`.
-- **Workflow**: Validates new password & OTP → Verifies OTP against Redis hash → Hashes new password → Updates User record in MongoDB → Triggers **Global Session Revocation** in Redis → Sends confirmation email.
+- **Purpose**: Finalize password update using verified reset OTP and terminate all concurrent user sessions.
+- **Components**: `auth.routes.js`, `auth.schema.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.helper.js`, `auth.repository.js`, `user.model.js`, `refresh-token.model.js`, `Redis`, `email.service.js`.
+- **Workflow**:
+  1. `POST /api/v1/auth/reset-password` endpoint invoked with `{ "email": "user@university.edu", "otp": "719302", "newPassword": "NewPassword2026!" }`.
+  2. `validateBody(resetPasswordSchema)` validates email, strict 6-digit OTP, and enforces password complexity policy via Zod schema (`.strict()`).
+  3. `authService.resetPassword` normalizes email and queries user in MongoDB (`authRepository.findByEmail`).
+  4. Retrieves ephemeral reset OTP record from Redis (`auth:otp:reset:<email>`). Rejects with `400 Bad Request` if expired or nonexistent.
+  5. Enforces attempt throttle (`PASSWORD_RESET_OTP_MAX_ATTEMPTS = 5`). If attempts exceeded, deletes OTP and rejects with `429 Too Many Requests`.
+  6. Verifies candidate OTP against stored HMAC-SHA256 hash using timing-safe comparison (`verifyPasswordResetOtpHash`). On mismatch, increments attempt counter in Redis and rejects with `400 Bad Request` (or deletes OTP and throws `429` on 5th failure).
+  7. On valid match, hashes new password with memory-hard Argon2id (`passwordService.hashPassword`).
+  8. Updates `passwordHash` on user record in MongoDB (`authRepository.updateUserById`).
+  9. Atomically clears all password reset state from Redis (`clearAllPasswordResetOtpState`) to prevent OTP replay.
+  10. Globally revokes all active refresh token families across all devices (`authRepository.revokeAllUserTokens`).
+  11. Dispatches security notice email (`emailService.sendPasswordResetConfirmation`).
+  12. Returns standardized JSON success envelope (`200 OK`, `data: null`).
 - **Sprint Task**: Sprint 2.13 (Reset Password).
 
 ### SD-06: User Logout & Refresh Token Family Revocation `[CANONICAL - SPRINT 2.11]`

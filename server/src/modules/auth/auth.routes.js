@@ -12,6 +12,7 @@ const {
   resendPhoneOtpSchema,
   loginSchema,
   forgotPasswordSchema,
+  resetPasswordSchema,
 } = require('./auth.schema');
 const authController = require('./auth.controller');
 
@@ -61,6 +62,14 @@ router.post(
   '/forgot-password',
   validateBody(forgotPasswordSchema),
   authController.forgotPassword
+);
+
+// ─── Reset Password Route (Sprint 2.13) ─────────────────────────────────────
+
+router.post(
+  '/reset-password',
+  validateBody(resetPasswordSchema),
+  authController.resetPassword
 );
 
 module.exports = {

@@ -387,9 +387,51 @@ const sendPasswordResetOtp = async ({ to, name, otp }) => {
   }
 };
 
+/**
+ * Sends a security notice informing the user that their password was updated.
+ *
+ * @param {Object} options
+ * @param {string} options.to - Recipient email.
+ * @param {string} [options.name] - Recipient name.
+ * @returns {Promise<{ success: boolean, messageId?: string, error?: string }>}
+ */
+const sendPasswordResetConfirmation = async ({ to, name }) => {
+  if (!to) {
+    return { success: false, error: 'Recipient email is required' };
+  }
+
+  const recipientName = name ? String(name).trim() : 'User';
+  const mailOptions = {
+    from: config.smtp.from || 'SABMS <noreply@sabms.edu>',
+    to,
+    subject: 'Your SABMS password has been changed',
+    text: `Hello ${recipientName},\n\nYour SABMS account password was successfully updated. All active sessions have been terminated.\n\nIf you did not make this change, please contact an administrator immediately.\n\nSABMS Security Team`,
+    html: `<p>Hello <strong>${recipientName}</strong>,</p><p>Your SABMS account password was successfully updated. All active sessions have been terminated.</p><p>If you did not make this change, please contact an administrator immediately.</p><p>SABMS Security Team</p>`,
+  };
+
+  try {
+    const currentTransporter = module.exports.getTransporter();
+    const info = await currentTransporter.sendMail(mailOptions);
+    logger.info('Password reset confirmation email dispatched successfully', {
+      context: 'EmailService',
+      recipient: to,
+      messageId: info.messageId,
+    });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logger.error('Failed to dispatch password reset confirmation email', {
+      context: 'EmailService',
+      recipient: to,
+      error: error.message,
+    });
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendEmailVerificationOtp,
   sendPasswordResetOtp,
+  sendPasswordResetConfirmation,
   getTransporter,
   setTransporter,
   buildVerificationEmailHtml,

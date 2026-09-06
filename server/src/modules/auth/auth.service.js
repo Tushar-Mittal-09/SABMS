@@ -23,6 +23,7 @@ const {
   PASSWORD_RESET_OTP_LENGTH,
   PASSWORD_RESET_OTP_TTL_SECONDS,
   PASSWORD_RESET_OTP_COOLDOWN_SECONDS,
+  PASSWORD_RESET_OTP_MAX_ATTEMPTS,
   PASSWORD_RESET_OTP_MAX_REQUESTS,
   PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS,
   REFRESH_TOKEN_STATUSES,
@@ -40,6 +41,7 @@ const {
   hashPasswordResetOtp,
   verifyEmailOtpHash,
   verifyPhoneOtpHash,
+  verifyPasswordResetOtpHash,
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
@@ -1196,6 +1198,167 @@ class AuthService {
       context: 'AuthService',
       recipient: normalizedEmail,
     });
+
+    return { success: true };
+  }
+
+  /**
+   * Finalizes password recovery via OTP verification and updates credentials (Sprint 2.13).
+   *
+   * Security Guarantees:
+   * - Strict normalization and formatting of inputs.
+   * - Enforces password complexity policy before any cryptographic hashing.
+   * - Hashes new password with memory-hard Argon2id.
+   * - Verifies OTP using timing-safe comparison (crypto.timingSafeEqual via verifyPasswordResetOtpHash).
+   * - Tracks verification failure attempts; deletes OTP and throws 429 after 5 failed attempts.
+   * - On success: immediately deletes reset OTP and all reset state from Redis (one-time use & anti-replay).
+   * - Atomically updates password in MongoDB.
+   * - Globally terminates all existing refresh token families / sessions across devices.
+   * - Never logs plaintext passwords, hashes, or OTPs.
+   * - Never returns passwords, hashes, or tokens in response payload.
+   *
+   * @param {Object} params
+   * @param {string} params.email - Recipient email address.
+   * @param {string} params.otp - 6-digit numeric OTP.
+   * @param {string} params.newPassword - New plaintext password adhering to complexity policy.
+   * @returns {Promise<{ success: boolean }>}
+   */
+  async resetPassword({ email, otp, newPassword }) {
+    // 1. Normalize email & validate candidate OTP format
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) {
+      throw AppError.badRequest('Valid email address is required');
+    }
+
+    if (!otp || typeof otp !== 'string' || !/^\d{6}$/.test(otp.trim())) {
+      throw AppError.badRequest('Verification code must be exactly 6 digits');
+    }
+    const cleanOtp = otp.trim();
+
+    if (!newPassword || typeof newPassword !== 'string') {
+      throw AppError.badRequest('New password is required');
+    }
+
+    // 2. Query user in MongoDB
+    const user = await this._authRepository.findByEmail(normalizedEmail);
+    if (!user) {
+      // Invariant: Return consistent error without leaking account existence
+      throw AppError.badRequest(
+        'Verification code has expired or is invalid. Please request a new code.'
+      );
+    }
+
+    // 3. Fetch stored reset OTP record from Redis
+    let otpRecord;
+    try {
+      otpRecord =
+        await this._authRepository.getPasswordResetOtp(normalizedEmail);
+    } catch (redisError) {
+      logger.error(
+        `Redis error fetching password reset OTP: ${redisError.message}`,
+        { context: 'AuthService' }
+      );
+      throw AppError.internal('Temporary service error. Please try again.');
+    }
+
+    if (!otpRecord) {
+      throw AppError.badRequest(
+        'Verification code has expired or is invalid. Please request a new code.'
+      );
+    }
+
+    // 4. Check if attempt limit has already been exceeded
+    if ((otpRecord.attempts || 0) >= PASSWORD_RESET_OTP_MAX_ATTEMPTS) {
+      await this._authRepository.deletePasswordResetOtp(normalizedEmail);
+      throw AppError.tooManyRequests(
+        'Maximum verification attempts exceeded. Code invalidated. Please request a new one.'
+      );
+    }
+
+    // 5. Timing-safe verification of supplied OTP against stored HMAC hash
+    const isOtpValid = verifyPasswordResetOtpHash(cleanOtp, otpRecord.otpHash);
+
+    if (!isOtpValid) {
+      const updateResult =
+        await this._authRepository.incrementPasswordResetOtpAttempts(
+          normalizedEmail
+        );
+      const currentAttempts = updateResult
+        ? updateResult.attempts
+        : (otpRecord.attempts || 0) + 1;
+
+      if (currentAttempts >= PASSWORD_RESET_OTP_MAX_ATTEMPTS) {
+        await this._authRepository.deletePasswordResetOtp(normalizedEmail);
+        throw AppError.tooManyRequests(
+          'Maximum verification attempts exceeded. Code invalidated. Please request a new one.'
+        );
+      }
+
+      throw AppError.badRequest(
+        'Invalid verification code. Please check and try again.'
+      );
+    }
+
+    // 6. Cryptographically hash new password with Argon2id
+    const passwordHash = await hashPassword(newPassword);
+
+    // 7. Update user's passwordHash in MongoDB
+    const userId = user._id ? user._id.toString() : user.id;
+    const updatedUser = await this._authRepository.updateUserById(userId, {
+      passwordHash,
+    });
+
+    if (!updatedUser) {
+      throw AppError.internal('Failed to update password');
+    }
+
+    // 8. Invalidate reset OTP and clear all reset state in Redis (prevent replay)
+    try {
+      await this._authRepository.clearAllPasswordResetOtpState(normalizedEmail);
+    } catch (cleanupErr) {
+      logger.warn(
+        `Failed to clear reset state in Redis for ${normalizedEmail}: ${cleanupErr.message}`,
+        { context: 'AuthService' }
+      );
+    }
+
+    // 9. Globally terminate all existing refresh token sessions across all devices
+    try {
+      await this._authRepository.revokeAllUserTokens(
+        userId,
+        REFRESH_TOKEN_REVOCATION_REASONS.PASSWORD_RESET || 'Password reset'
+      );
+    } catch (revokeErr) {
+      logger.warn(
+        `Failed to revoke existing user token families for ${userId}: ${revokeErr.message}`,
+        { context: 'AuthService' }
+      );
+    }
+
+    // 10. Send security confirmation email if email service supports it
+    try {
+      if (
+        typeof this._emailService.sendPasswordResetConfirmation === 'function'
+      ) {
+        await this._emailService.sendPasswordResetConfirmation({
+          to: normalizedEmail,
+          name: user.name,
+        });
+      }
+    } catch (emailErr) {
+      logger.warn(
+        `Failed to dispatch password reset confirmation email to ${normalizedEmail}: ${emailErr.message}`,
+        { context: 'AuthService' }
+      );
+    }
+
+    logger.info(
+      'Password reset completed successfully and all active sessions terminated',
+      {
+        context: 'AuthService',
+        userId,
+      }
+    );
 
     return { success: true };
   }

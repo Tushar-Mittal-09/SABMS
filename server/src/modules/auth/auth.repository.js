@@ -507,6 +507,37 @@ class AuthRepository {
   }
 
   /**
+   * Increments the verification attempt counter for a stored password reset OTP.
+   * Preserves remaining TTL or deletes key if expired.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<{ attempts: number, otpData: Object }|null>}
+   */
+  async incrementPasswordResetOtpAttempts(email) {
+    const key = createPasswordResetOtpRedisKey(email);
+    const redis = this._getRedis();
+    const data = await redis.get(key);
+    if (!data) return null;
+
+    try {
+      const otpData = JSON.parse(data);
+      otpData.attempts = (otpData.attempts || 0) + 1;
+
+      const ttl = await redis.ttl(key);
+      if (ttl > 0) {
+        await redis.set(key, JSON.stringify(otpData), 'EX', ttl);
+      } else {
+        await redis.del(key);
+        return null;
+      }
+
+      return { attempts: otpData.attempts, otpData };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Deletes Password Reset OTP record from Redis immediately.
    *
    * @param {string} email - Target user email.
@@ -717,6 +748,35 @@ class AuthRepository {
       {
         familyId,
         status: { $ne: REFRESH_TOKEN_STATUSES.REUSED },
+      },
+      {
+        $set: {
+          status: REFRESH_TOKEN_STATUSES.REVOKED,
+          revokedAt,
+          revokedReason: reason,
+        },
+      }
+    );
+  }
+
+  /**
+   * Revokes all active refresh tokens belonging to a user across all families/devices.
+   *
+   * @param {string} userId - User identifier.
+   * @param {string} [reason='Password reset'] - Revocation reason.
+   * @param {Date} [revokedAt=new Date()] - Revocation timestamp.
+   * @returns {Promise<import('mongodb').UpdateResult>}
+   */
+  async revokeAllUserTokens(
+    userId,
+    reason = 'Password reset',
+    revokedAt = new Date()
+  ) {
+    if (!userId) return { modifiedCount: 0 };
+    return this._refreshTokenModel.updateMany(
+      {
+        userId,
+        status: { $ne: REFRESH_TOKEN_STATUSES.REVOKED },
       },
       {
         $set: {

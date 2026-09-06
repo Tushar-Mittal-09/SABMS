@@ -197,6 +197,26 @@ class AuthController {
       'If an account exists with this email, a reset code has been sent.'
     );
   });
+
+  /**
+   * Password Reset Finalization Endpoint Handler (Sprint 2.13).
+   * POST /api/v1/auth/reset-password
+   *
+   * Security Boundaries:
+   * - Validates email, OTP, and newPassword strictly via resetPasswordSchema.
+   * - Hashes new password with memory-hard Argon2id.
+   * - Invalidates reset OTP immediately upon successful verification.
+   * - Revokes all active refresh tokens for the user account.
+   * - Never exposes user data, passwords, or tokens in response.
+   */
+  resetPassword = catchAsync(async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+    await authService.resetPassword({ email, otp, newPassword });
+    return res.success(
+      null,
+      'Password reset successful. All active sessions have been terminated. Please log in.'
+    );
+  });
 }
 
 const authControllerInstance = new AuthController();

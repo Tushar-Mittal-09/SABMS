@@ -161,3 +161,12 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 | **NoSQL Injection**        | Injecting MongoDB operator objects (`$gt`, `$ne`, etc.) in inputs. | Express 5 compatible in-place NoSQL sanitization stripping `$` keys before validation.                                                                                                                                                                                                                                                                                                                      |
 | **Account Enumeration**    | Determining valid emails via differing error responses or timing.  | Constant-time response simulation; generic responses on password reset (`"If an account exists, instructions have been sent"`).                                                                                                                                                                                                                                                                             |
 | **Privilege Escalation**   | Manipulating role claims in JWT or request bodies.                 | Cryptographic HMAC signature verification on access tokens; RBAC permission re-validation on sensitive administrative endpoints.                                                                                                                                                                                                                                                                            |
+
+---
+
+## 8. Final Security Hardening & Information Disclosure Defense `[IMPLEMENTED - SPRINT 2.20]`
+
+1. **HTTP Method Filtering**: Dangerous or diagnostic HTTP methods (`TRACE`, `TRACK`) are rejected with `405 Method Not Allowed`, mitigating Cross-Site Tracing (XST) and header reflection attacks.
+2. **Anti-Caching Enforcement**: All authentication endpoints under `/api/v1/auth/*` enforce OWASP-compliant `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate`, `Pragma: no-cache`, `Expires: 0`, and `Surrogate-Control: no-store` headers to prevent credential, token, or OTP caching in intermediate proxies or browser history.
+3. **Server Information Masking**: `X-Powered-By` is stripped across all responses (`app.disable('x-powered-by')`), and server software version banners are suppressed.
+4. **MIME & Frame Guarding**: Pinned `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` prevent MIME confusion attacks and UI redressing/clickjacking.

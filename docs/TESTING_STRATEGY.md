@@ -118,6 +118,13 @@
 - [x] `TC-AUTH-082`: Helmet enforces enterprise Content-Security-Policy with `base-uri 'self'`, `frame-ancestors 'none'`, and `object-src 'none'` (`auth.xss.test.js`) (Sprint 2.19).
 - [x] `TC-AUTH-083`: `xssSanitizer` middleware sanitizes `req.body`, `req.query`, and `req.params` in-place while leaving password fields untouched (`auth.xss.test.js`) (Sprint 2.19).
 
+### 3.10 Final Security Hardening & Information Disclosure Tests (Sprint 2.20)
+
+- [x] `TC-AUTH-090`: Disallowed HTTP methods (`TRACE`, `TRACK`) are rejected with `405 Method Not Allowed` and `Allow` header (`auth.hardening.test.js`) (Sprint 2.20).
+- [x] `TC-AUTH-091`: Authentication routes enforce anti-caching headers (`Cache-Control: no-store, no-cache, must-revalidate`, `Pragma: no-cache`, `Expires: 0`) (`auth.hardening.test.js`) (Sprint 2.20).
+- [x] `TC-AUTH-092`: Information disclosure headers (`X-Powered-By`, `Server`) are stripped from HTTP responses (`auth.hardening.test.js`) (Sprint 2.20).
+- [x] `TC-AUTH-093`: Response MIME sniffing prevention (`X-Content-Type-Options: nosniff`) and clickjacking defense (`X-Frame-Options: DENY`) verified across endpoints (`auth.hardening.test.js`) (Sprint 2.20).
+
 ---
 
 ## 4. Continuous Integration Quality Gates

@@ -28,6 +28,11 @@ const {
   sanitizeXssString,
   sanitizeXssObject,
 } = require('./xss.middleware');
+const {
+  methodFilterMiddleware,
+  noCacheMiddleware,
+  securityHardeningHeaders,
+} = require('./hardening.middleware');
 
 module.exports = {
   authenticate,
@@ -39,6 +44,9 @@ module.exports = {
   xssSanitizer,
   sanitizeXssString,
   sanitizeXssObject,
+  methodFilterMiddleware,
+  noCacheMiddleware,
+  securityHardeningHeaders,
   errorHandler,
   requestId,
   responseHandler,

@@ -14,6 +14,10 @@ const { ApiResponse } = require('../response/apiResponse');
 const requestId = require('./requestId.middleware');
 const { csrfProtection } = require('./csrf.middleware');
 const { xssSanitizer } = require('./xss.middleware');
+const {
+  methodFilterMiddleware,
+  securityHardeningHeaders,
+} = require('./hardening.middleware');
 
 /**
  * 1. Helmet Security Middleware
@@ -195,41 +199,46 @@ const urlencodedBodyParser = express.urlencoded({
  * @param {import('express').Application} app
  */
 const applySecurityMiddleware = (app) => {
-  // 0. Extended Query Parser
+  // 0. Disable information disclosure headers & configure query parser
+  app.disable('x-powered-by');
   app.set('query parser', 'extended');
 
-  // 1. Request correlation ID tracking
+  // 1. Method filtering & security hardening headers (Sprint 2.20)
+  app.use(methodFilterMiddleware);
+  app.use(securityHardeningHeaders);
+
+  // 2. Request correlation ID tracking
   app.use(requestId);
 
-  // 2. HTTP Security Headers
+  // 3. HTTP Security Headers
   app.use(helmetSecurity);
 
-  // 3. CORS
+  // 4. CORS
   app.use(corsSecurity);
 
-  // 4. Rate Limiting
+  // 5. Rate Limiting
   app.use(rateLimiterSecurity);
 
-  // 5. Response Compression
+  // 6. Response Compression
   app.use(compressionSecurity);
 
-  // 6. Cookie Parser
+  // 7. Cookie Parser
   app.use(cookieParserSecurity);
 
-  // 7. Request Body Parsers & Size Limits
+  // 8. Request Body Parsers & Size Limits
   app.use(jsonBodyParser);
   app.use(urlencodedBodyParser);
 
-  // 8. NoSQL Injection Sanitization
+  // 9. NoSQL Injection Sanitization
   app.use(mongoSanitizeSecurity);
 
-  // 9. HTTP Parameter Pollution Defense
+  // 10. HTTP Parameter Pollution Defense
   app.use(hppSecurity);
 
-  // 10. Cross-Site Scripting (XSS) Sanitization (Sprint 2.19)
+  // 11. Cross-Site Scripting (XSS) Sanitization (Sprint 2.19)
   app.use(xssSanitizer);
 
-  // 11. Cross-Site Request Forgery (CSRF) Protection (Sprint 2.18)
+  // 12. Cross-Site Request Forgery (CSRF) Protection (Sprint 2.18)
   app.use(csrfProtection);
 };
 
@@ -240,6 +249,8 @@ module.exports = {
   hppSecurity,
   mongoSanitizeSecurity,
   xssSanitizer,
+  methodFilterMiddleware,
+  securityHardeningHeaders,
   rateLimiterSecurity,
   compressionSecurity,
   cookieParserSecurity,

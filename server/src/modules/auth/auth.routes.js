@@ -11,6 +11,9 @@ const {
 const {
   registerRateLimiter,
 } = require('../../core/middleware/rateLimiter.middleware');
+const {
+  noCacheMiddleware,
+} = require('../../core/middleware/hardening.middleware');
 const { USER_ROLES } = require('../../shared/constants');
 const {
   registerSchema,
@@ -28,6 +31,10 @@ const {
 const authController = require('./auth.controller');
 
 const router = express.Router();
+
+// ─── Security Hardening: Anti-Caching for Auth Endpoints (Sprint 2.20) ──────
+
+router.use(noCacheMiddleware);
 
 // ─── Registration, Email/Phone Verification & Login Routes (Sprint 2.4 - 2.7) ───
 

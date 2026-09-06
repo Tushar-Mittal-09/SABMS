@@ -59,8 +59,9 @@
 - [x] `TC-AUTH-020c`: Access token verification enforces HS256 algorithm, secret integrity, issuer, and audience matching (`auth.access-token.test.js`) (Sprint 2.8).
 - [x] `TC-AUTH-020d`: Login issues HttpOnly refresh token cookie with Secure, SameSite, and Path scoping (`auth.refresh-token.test.js`) (Sprint 2.9).
 - [x] `TC-AUTH-021`: Login with invalid password returns `401 Unauthorized` (`AUTH_INVALID_CREDENTIALS`) (Sprint 2.7).
-- [x] `TC-AUTH-022`: Login with non-existent email returns `401 Unauthorized` (timing-safe & anti-enumeration) (Sprint 2.7).
-- [ ] `TC-AUTH-023`: 5 consecutive failed logins locks account for 15 minutes (`429 Too Many Requests`) (Sprint 2.17).
+- [x] `TC-AUTH-023`: 5 consecutive failed logins locks account for 15 minutes (`429 Too Many Requests`), fast-fails before DB lookup, and dispatches security alert email (`auth.rate-limiting.test.js`) (Sprint 2.17).
+- [x] `TC-AUTH-023b`: Administrative unlock endpoint (`POST /api/v1/auth/unlock`) clears Redis lockout key and permits subsequent logins, protected by RBAC (`auth.rate-limiting.test.js`) (Sprint 2.17).
+- [x] `TC-AUTH-023c`: Public registration endpoint rate limiter throttles excessive requests (max 10 requests per hour per IP) with `429 Too Many Requests` (`auth.rate-limiting.test.js`) (Sprint 2.17).
 - [x] `TC-AUTH-024`: Login on unverified account returns `403 Forbidden` (`AUTH_ACCOUNT_UNVERIFIED`) (Sprint 2.7).
 
 ### 3.4 Token Lifecycle & Refresh Tests (Sprint 2.9, 2.10, 2.11)

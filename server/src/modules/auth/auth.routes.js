@@ -4,7 +4,14 @@ const express = require('express');
 const {
   validateBody,
 } = require('../../core/middleware/validateRequest.middleware');
-const { authenticate } = require('../../core/middleware/auth.middleware');
+const {
+  authenticate,
+  authorize,
+} = require('../../core/middleware/auth.middleware');
+const {
+  registerRateLimiter,
+} = require('../../core/middleware/rateLimiter.middleware');
+const { USER_ROLES } = require('../../shared/constants');
 const {
   registerSchema,
   verifyEmailSchema,
@@ -16,6 +23,7 @@ const {
   resetPasswordSchema,
   changePasswordSchema,
   resendOtpSchema,
+  unlockAccountSchema,
 } = require('./auth.schema');
 const authController = require('./auth.controller');
 
@@ -23,7 +31,12 @@ const router = express.Router();
 
 // ─── Registration, Email/Phone Verification & Login Routes (Sprint 2.4 - 2.7) ───
 
-router.post('/register', validateBody(registerSchema), authController.register);
+router.post(
+  '/register',
+  registerRateLimiter,
+  validateBody(registerSchema),
+  authController.register
+);
 
 router.post(
   '/verify-email',
@@ -101,6 +114,16 @@ router.delete(
   authController.revokeSession
 );
 router.delete('/sessions', authenticate, authController.revokeAllOtherSessions);
+
+// ─── Administrative Account Unlock Route (Sprint 2.17 / SD-14) ────────────
+
+router.post(
+  '/unlock',
+  authenticate,
+  authorize(USER_ROLES.ADMIN),
+  validateBody(unlockAccountSchema),
+  authController.unlockAccount
+);
 
 module.exports = {
   authRouter: router,

@@ -339,18 +339,18 @@ class AppError extends Error {
 - **Workflow**: Client receives 401 on expired access token → Interceptor pauses requests → Calls `POST /api/v1/auth/refresh` → Receives new access token → Retries original failed request.
 - **Sprint Task**: Sprint 2.9 & 2.16 (Refresh & Session Lifecycle).
 
-### SD-13: Account Lock After Failed Login Attempts
+### SD-13: Account Lock After Failed Login Attempts `[IMPLEMENTED]`
 
 - **Purpose**: Defend against automated credential stuffing and brute-force attacks.
-- **Components**: `auth.service.js`, `Redis`, `Email Service`.
-- **Workflow**: On invalid password attempt, increments Redis failure counter (`lockout:<email>`) with 15 min TTL → If count exceeds 5 attempts, sets lock status → Rejects subsequent attempts with 429 Too Many Requests → Sends security alert email.
+- **Components**: `auth.service.js`, `auth.repository.js`, `Redis`, `email.service.js`.
+- **Workflow**: On invalid credentials attempt, increments Redis failure counter (`lockout:<normalizedEmail>`) with 15 min (900s) TTL → If failure count reaches 5 attempts, sets lock status → Rejects subsequent attempts with `429 Too Many Requests` (fast fail before database lookup) → Dispatches automated security alert notice email (`sendAccountLockoutAlert`). Successful login clears the lockout key.
 - **Sprint Task**: Sprint 2.7 & 2.17 (Login & Rate Limiting).
 
-### SD-14: Account Unlock
+### SD-14: Account Unlock `[IMPLEMENTED]`
 
 - **Purpose**: Restore locked account automatically after TTL or via admin intervention.
-- **Components**: `auth.service.js`, `Redis`, `auth.repository.js`.
-- **Workflow**: Automatic: Redis key expires after 15–30 minutes. Manual: Admin executes unlock endpoint clearing Redis lockout key and resetting failure counter.
+- **Components**: `auth.service.js`, `auth.controller.js`, `auth.routes.js`, `auth.repository.js`, `Redis`.
+- **Workflow**: Automatic: Redis key expires after 15 minutes. Manual: Admin executes `POST /api/v1/auth/unlock` clearing Redis lockout key and resetting failure counter. Protected by `authenticate` and `authorize(USER_ROLES.ADMIN)`.
 - **Sprint Task**: Sprint 2.17 (Rate Limits & Account Lock).
 
 ### SD-15: Session Validation & Device Fingerprinting `[IMPLEMENTED]`

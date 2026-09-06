@@ -680,19 +680,82 @@ class AuthService {
       throw AppError.unauthorized('Invalid email or password.');
     }
 
-    // 2. Look up user by email explicitly including passwordHash
+    // 2. Check Account Lockout Policy (Sprint 2.17 / SD-13)
+    const lockoutState =
+      await this._authRepository.getAccountLockout(normalizedEmail);
+    if (lockoutState.locked) {
+      const minutes = Math.max(
+        1,
+        Math.ceil((lockoutState.remainingTtl || 900) / 60)
+      );
+      throw AppError.tooManyRequests(
+        `Account is temporarily locked due to multiple failed login attempts. Please try again in ${minutes} minutes or contact support.`
+      );
+    }
+
+    // 3. Look up user by email explicitly including passwordHash
     const user =
       await this._authRepository.findByEmailWithPasswordHash(normalizedEmail);
 
-    // 3. Prevent account enumeration: if user does not exist, return generic 401
+    // 4. Prevent account enumeration: if user does not exist, return generic 401
     if (!user || !user.passwordHash) {
+      const failureResult =
+        await this._authRepository.recordFailedLoginAttempt(normalizedEmail);
+      if (failureResult.locked) {
+        const minutes = Math.max(
+          1,
+          Math.ceil((failureResult.remainingTtl || 900) / 60)
+        );
+        throw AppError.tooManyRequests(
+          `Account is temporarily locked due to multiple failed login attempts. Please try again in ${minutes} minutes or contact support.`
+        );
+      }
       throw AppError.unauthorized('Invalid email or password.');
     }
 
-    // 4. Verify password against stored Argon2id hash (constant-time)
+    // 5. Verify password against stored Argon2id hash (constant-time)
     const isPasswordValid = await verifyPassword(password, user.passwordHash);
     if (!isPasswordValid) {
+      const failureResult =
+        await this._authRepository.recordFailedLoginAttempt(normalizedEmail);
+      if (failureResult.locked) {
+        try {
+          await emailService.sendAccountLockoutAlert({
+            to: user.email,
+            name: user.firstName || user.name || 'User',
+            unlockMinutes: Math.max(
+              1,
+              Math.ceil((failureResult.remainingTtl || 900) / 60)
+            ),
+          });
+        } catch (emailErr) {
+          logger.warn(
+            `Failed to dispatch lockout alert email: ${emailErr.message}`,
+            {
+              context: 'AuthService',
+              email: normalizedEmail,
+            }
+          );
+        }
+        const minutes = Math.max(
+          1,
+          Math.ceil((failureResult.remainingTtl || 900) / 60)
+        );
+        throw AppError.tooManyRequests(
+          `Account is temporarily locked due to multiple failed login attempts. Please try again in ${minutes} minutes or contact support.`
+        );
+      }
       throw AppError.unauthorized('Invalid email or password.');
+    }
+
+    // Clear any previous failed login attempt counters upon successful authentication
+    try {
+      await this._authRepository.clearAccountLockout(normalizedEmail);
+    } catch (clearErr) {
+      logger.warn(
+        `Failed to clear account lockout state for ${normalizedEmail}: ${clearErr.message}`,
+        { context: 'AuthService' }
+      );
     }
 
     // 5. Account state rules:
@@ -1796,6 +1859,34 @@ class AuthService {
     await this._authRepository.updateSessionCacheActivity(sessionId);
 
     return { valid: true };
+  }
+
+  // ─── Administrative Account Unlock (Sprint 2.17 / SD-14) ─────────────
+
+  /**
+   * Manually unlocks an account locked by failed login attempts.
+   *
+   * @param {string} email - Target account email.
+   * @returns {Promise<{ email: string, unlocked: boolean, message: string }>}
+   */
+  async unlockAccount(email) {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) {
+      throw AppError.badRequest(
+        'A valid email address is required to unlock an account'
+      );
+    }
+
+    await this._authRepository.clearAccountLockout(normalizedEmail);
+    logger.info(`Account manually unlocked for email: ${normalizedEmail}`, {
+      context: 'AuthService',
+    });
+
+    return {
+      email: normalizedEmail,
+      unlocked: true,
+      message: 'Account lockout cleared successfully.',
+    };
   }
 }
 

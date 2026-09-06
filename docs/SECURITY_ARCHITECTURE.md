@@ -127,16 +127,21 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 
 ---
 
-## 6. Rate Limiting & Account Lockout Strategy
+## 6. Rate Limiting & Account Lockout Strategy `[IMPLEMENTED - SPRINT 2.17]`
 
 | Target Endpoint                         | Rate Limit Policy            | Redis Key / Scope                                                 | Exceeded Behavior                                          |
 | :-------------------------------------- | :--------------------------- | :---------------------------------------------------------------- | :--------------------------------------------------------- |
 | **`POST /api/v1/auth/login`**           | 5 failed attempts per 15 min | `lockout:<email>`                                                 | Account locked for 15 min; returns `429 Too Many Requests` |
+| **`POST /api/v1/auth/unlock`**          | ADMIN only                   | `lockout:<email>`                                                 | Clears lockout key and resets failed attempt counter       |
 | **`POST /api/v1/auth/register`**        | 10 requests per hour         | `rl:reg:<ip>`                                                     | Rejects with `429 Too Many Requests`                       |
 | **`POST /api/v1/auth/resend-otp`**      | 1 request per 60s; max 3/hr  | `otp:resend:<id>`                                                 | Rejects with `429 Cooldown Active`                         |
 | **`POST /api/v1/auth/forgot-password`** | 1 request per 60s; max 3/hr  | `auth:otp:reset:cooldown:<email>` / `auth:otp:reset:rate:<email>` | Generic `429 Too Many Requests` (Zero Enumeration)         |
 | **`POST /api/v1/auth/verify-*`**        | 5 attempts per OTP lifespan  | `otp:<type>:<id>`                                                 | Invalidation of OTP code on 5th failure                    |
 | **Global Auth Endpoints**               | 100 requests per 15 min      | `rl:auth:ip:<ip>`                                                 | Global Express rate limiter throttle                       |
+
+- **Account Lockout & Alerting (SD-13)**: Tracks failed attempts using atomic Redis counter. On 5th failure within 15 minutes, locks account, returns fast 429 response, and asynchronously dispatches a security notification email alert (`sendAccountLockoutAlert`). Successful login automatically clears the failure counter.
+- **Administrative Unlock (SD-14)**: Authorized administrators can immediately restore locked accounts via `POST /api/v1/auth/unlock`, which deletes the Redis lockout key.
+- **Registration Throttling**: IP-based rate limiter restricts registration floods to a maximum of 10 requests per hour per IP.
 
 ---
 

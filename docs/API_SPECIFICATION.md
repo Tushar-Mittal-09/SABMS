@@ -647,6 +647,34 @@
   }
   ```
 
+#### `POST /api/v1/auth/unlock` `[SPRINT 2.17 / SD-14]`
+
+- **Description**: Manually unlocks a user account locked due to excessive failed login attempts by clearing the Redis lockout key and counter.
+- **Access**: Authenticated (`ADMIN` role required)
+- **Request Body**:
+  ```json
+  {
+    "email": "student@university.edu"
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Account unlocked successfully.",
+    "data": {
+      "email": "student@university.edu",
+      "unlocked": true,
+      "message": "Account lockout cleared successfully."
+    },
+    "meta": null
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or invalid Bearer token.
+  - `403 Forbidden`: Authenticated user is not an `ADMIN`.
+  - `422 Unprocessable Entity`: Missing or malformed email address.
+
 ---
 
 ### 4.3 Users Endpoints (`/api/v1/users`)

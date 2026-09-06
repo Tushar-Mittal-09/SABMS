@@ -428,10 +428,53 @@ const sendPasswordResetConfirmation = async ({ to, name }) => {
   }
 };
 
+/**
+ * Sends a security notice informing the user that their account was locked due to failed login attempts.
+ *
+ * @param {Object} options
+ * @param {string} options.to - Recipient email.
+ * @param {string} [options.name] - Recipient name.
+ * @param {number} [options.unlockMinutes=15] - Duration of temporary lockout.
+ * @returns {Promise<{ success: boolean, messageId?: string, error?: string }>}
+ */
+const sendAccountLockoutAlert = async ({ to, name, unlockMinutes = 15 }) => {
+  if (!to) {
+    return { success: false, error: 'Recipient email is required' };
+  }
+
+  const recipientName = name ? String(name).trim() : 'User';
+  const mailOptions = {
+    from: config.smtp.from || 'SABMS <noreply@sabms.edu>',
+    to,
+    subject: 'Security Alert: Your SABMS account has been temporarily locked',
+    text: `Hello ${recipientName},\n\nYour SABMS account has been temporarily locked for ${unlockMinutes} minutes due to multiple failed login attempts.\n\nIf you did not attempt to log in, your credentials may be under attack. Please contact security or an administrator immediately.\n\nSABMS Security Team`,
+    html: `<p>Hello <strong>${recipientName}</strong>,</p><p>Your SABMS account has been temporarily locked for <strong>${unlockMinutes} minutes</strong> due to multiple failed login attempts.</p><p>If you did not attempt to log in, your credentials may be under attack. Please contact an administrator immediately.</p><p>SABMS Security Team</p>`,
+  };
+
+  try {
+    const currentTransporter = module.exports.getTransporter();
+    const info = await currentTransporter.sendMail(mailOptions);
+    logger.info('Account lockout alert email dispatched successfully', {
+      context: 'EmailService',
+      recipient: to,
+      messageId: info.messageId,
+    });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logger.error('Failed to dispatch account lockout alert email', {
+      context: 'EmailService',
+      recipient: to,
+      error: error.message,
+    });
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendEmailVerificationOtp,
   sendPasswordResetOtp,
   sendPasswordResetConfirmation,
+  sendAccountLockoutAlert,
   getTransporter,
   setTransporter,
   buildVerificationEmailHtml,

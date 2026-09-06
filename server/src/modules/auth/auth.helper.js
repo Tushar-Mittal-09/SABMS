@@ -22,6 +22,7 @@ const {
   PASSWORD_RESET_OTP_HASH_ALGORITHM,
   JWT_POLICY,
   SESSION_REDIS_KEY_PREFIX,
+  ACCOUNT_LOCKOUT_REDIS_KEY_PREFIX,
 } = require('./auth.constants');
 
 /**
@@ -158,6 +159,28 @@ const verifyDeviceFingerprint = (clientMeta, expectedHash) => {
 const createSessionRedisKey = (sessionId) => {
   if (!sessionId) return '';
   return `${SESSION_REDIS_KEY_PREFIX}${sessionId}`;
+};
+
+/**
+ * Constructs Redis key for account lockout tracking (SD-13).
+ *
+ * @param {string} email - Target user email address.
+ * @returns {string} Fully qualified Redis lockout key.
+ */
+const createAccountLockoutRedisKey = (email) => {
+  if (!email) return '';
+  return `${ACCOUNT_LOCKOUT_REDIS_KEY_PREFIX}${normalizeEmail(email)}`;
+};
+
+/**
+ * Constructs Redis key for registration rate limiting.
+ *
+ * @param {string} ip - Client IP address.
+ * @returns {string} Fully qualified Redis registration rate limit key.
+ */
+const createRegisterRateLimitRedisKey = (ip) => {
+  if (!ip) return '';
+  return `rl:reg:${ip.trim()}`;
 };
 
 /**
@@ -828,4 +851,6 @@ module.exports = {
   generateDeviceFingerprint,
   verifyDeviceFingerprint,
   createSessionRedisKey,
+  createAccountLockoutRedisKey,
+  createRegisterRateLimitRedisKey,
 };

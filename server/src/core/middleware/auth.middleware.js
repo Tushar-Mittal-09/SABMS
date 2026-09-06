@@ -55,6 +55,38 @@ const authenticate = (req, res, next) => {
   }
 };
 
+/**
+ * Role-Based Access Control (RBAC) Guard Middleware (Sprint 2.17).
+ *
+ * Security Boundary:
+ * - Checks authenticated user's role against permitted roles.
+ * - Rejects unauthenticated requests with 401 Unauthorized.
+ * - Rejects unauthorized roles with 403 Forbidden.
+ *
+ * @param {...string} roles - Permitted roles (e.g. USER_ROLES.ADMIN).
+ * @returns {import('express').RequestHandler}
+ */
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return next(
+        AppError.unauthorized('Access denied. Authentication required.')
+      );
+    }
+
+    if (roles.length > 0 && !roles.includes(req.user.role)) {
+      return next(
+        AppError.forbidden(
+          'Access denied. You do not have permission to perform this action.'
+        )
+      );
+    }
+
+    return next();
+  };
+};
+
 module.exports = {
   authenticate,
+  authorize,
 };

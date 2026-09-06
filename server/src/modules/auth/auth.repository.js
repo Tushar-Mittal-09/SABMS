@@ -13,6 +13,8 @@ const {
   PASSWORD_RESET_OTP_RATE_WINDOW_SECONDS,
   REFRESH_TOKEN_STATUSES,
   SESSION_CACHE_TTL_SECONDS,
+  LOGIN_LOCKOUT_TTL_SECONDS,
+  LOGIN_MAX_ATTEMPTS,
 } = require('./auth.constants');
 const {
   createOtpRedisKey,
@@ -25,6 +27,7 @@ const {
   createPasswordResetCooldownRedisKey,
   createPasswordResetRateRedisKey,
   createSessionRedisKey,
+  createAccountLockoutRedisKey,
   normalizeEmail,
   normalizePhone,
 } = require('./auth.helper');
@@ -976,6 +979,83 @@ class AuthRepository {
         revokedReason: reason,
       },
     });
+  }
+
+  // ─── Account Lockout (Sprint 2.17 / SD-13 & SD-14) ────────────────────
+
+  /**
+   * Checks current lockout status for an account.
+   *
+   * @param {string} email
+   * @returns {Promise<{ attempts: number, locked: boolean, remainingTtl: number }>}
+   */
+  async getAccountLockout(email) {
+    const redis = this._getRedis();
+    if (!this._isRedisUsable(redis) || !email) {
+      return { attempts: 0, locked: false, remainingTtl: 0 };
+    }
+
+    const key = createAccountLockoutRedisKey(email);
+    const [rawAttempts, ttl] = await Promise.all([
+      redis.get(key),
+      redis.ttl(key),
+    ]);
+
+    const attempts = parseInt(rawAttempts, 10) || 0;
+    const remainingTtl = ttl > 0 ? ttl : 0;
+    const locked = attempts >= LOGIN_MAX_ATTEMPTS;
+
+    return { attempts, locked, remainingTtl };
+  }
+
+  /**
+   * Records a failed login attempt in Redis and locks the account if threshold is met.
+   *
+   * @param {string} email
+   * @param {number} [ttlSeconds=LOGIN_LOCKOUT_TTL_SECONDS]
+   * @returns {Promise<{ attempts: number, locked: boolean, remainingTtl: number }>}
+   */
+  async recordFailedLoginAttempt(
+    email,
+    ttlSeconds = LOGIN_LOCKOUT_TTL_SECONDS
+  ) {
+    const redis = this._getRedis();
+    if (!this._isRedisUsable(redis) || !email) {
+      return { attempts: 1, locked: false, remainingTtl: ttlSeconds };
+    }
+
+    const key = createAccountLockoutRedisKey(email);
+    const attempts = await redis.incr(key);
+
+    if (attempts === 1) {
+      await redis.expire(key, ttlSeconds);
+    } else if (attempts === LOGIN_MAX_ATTEMPTS) {
+      // Re-apply full lockout TTL once threshold is hit
+      await redis.expire(key, ttlSeconds);
+    }
+
+    const ttl = await redis.ttl(key);
+    const remainingTtl = ttl > 0 ? ttl : ttlSeconds;
+    const locked = attempts >= LOGIN_MAX_ATTEMPTS;
+
+    return { attempts, locked, remainingTtl };
+  }
+
+  /**
+   * Clears account lockout state upon successful login or administrative unlock.
+   *
+   * @param {string} email
+   * @returns {Promise<boolean>}
+   */
+  async clearAccountLockout(email) {
+    const redis = this._getRedis();
+    if (!this._isRedisUsable(redis) || !email) {
+      return true;
+    }
+
+    const key = createAccountLockoutRedisKey(email);
+    await redis.del(key);
+    return true;
   }
 }
 

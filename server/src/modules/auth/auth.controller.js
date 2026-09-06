@@ -334,6 +334,16 @@ class AuthController {
 
     return res.success(null, 'All other sessions revoked successfully.');
   });
+
+  /**
+   * Administrative Account Unlock Endpoint Handler (Sprint 2.17 / SD-14).
+   * POST /api/v1/auth/unlock
+   */
+  unlockAccount = catchAsync(async (req, res) => {
+    const { email } = req.body;
+    const result = await authService.unlockAccount(email);
+    return res.success(result, 'Account unlocked successfully.');
+  });
 }
 
 const authControllerInstance = new AuthController();

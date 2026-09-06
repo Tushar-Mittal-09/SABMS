@@ -257,6 +257,18 @@ const resendOtpSchema = z
     }
   });
 
+/**
+ * Account Unlock Validation Contract (Sprint 2.17 / SD-14).
+ *
+ * Accepted fields:
+ * - email: valid email (required)
+ */
+const unlockAccountSchema = z
+  .object({
+    email: email({ required: true }),
+  })
+  .strict();
+
 module.exports = {
   registerSchema,
   verifyEmailSchema,
@@ -268,4 +280,5 @@ module.exports = {
   resetPasswordSchema,
   changePasswordSchema,
   resendOtpSchema,
+  unlockAccountSchema,
 };

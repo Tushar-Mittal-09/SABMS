@@ -50,6 +50,7 @@
 - [x] `TC-AUTH-015`: Verify phone OTP with valid 6-digit code marks `isPhoneVerified: true` (Sprint 2.6).
 - [x] `TC-AUTH-016`: Phone OTP resend enforces 60s cooldown and 5 maximum resends (Sprint 2.6).
 - [x] `TC-AUTH-017`: Phone verification preserves existing email verification and account status (Sprint 2.6).
+- [x] `TC-AUTH-018`: Generic `/resend-otp` supports email and phone verification resends with cooldown and attempt limits (`auth.general-resend.test.js`) (Sprint 2.15).
 
 ### 3.3 Login & Session Tests (Sprint 2.7, Sprint 2.8 & Sprint 2.9 Completed)
 

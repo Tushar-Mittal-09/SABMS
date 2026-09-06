@@ -315,6 +315,43 @@
   }
   ```
 
+#### `POST /api/v1/auth/resend-otp` `[CANONICAL - SPRINT 2.15]`
+
+- **Description**: General verification OTP resend endpoint supporting both email and phone registration verification. Replaces active OTP with new code, refreshed 10-minute TTL, enforces 60-second cooldown, and limits resends to 5 attempts per window.
+- **Access**: Public (Throttled)
+- **Request Body (Email)**:
+  ```json
+  {
+    "type": "email",
+    "email": "jane.doe@university.edu"
+  }
+  ```
+- **Request Body (Phone)**:
+  ```json
+  {
+    "type": "phone",
+    "phone": "+1234567890"
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Verification code sent successfully",
+    "data": {
+      "type": "email",
+      "recipient": "jane.doe@university.edu"
+    },
+    "meta": null
+  }
+  ```
+- **Security Boundaries & Invariants (Sprint 2.15)**:
+  - **Isolated OTP Purposes**: Strictly limited to email and phone verification; password reset codes CANNOT be requested or regenerated via this endpoint.
+  - **Cooldown & Limit Throttling**: Enforces 60-second cooldown and 5-resend hourly limits with generic `429 Too Many Requests`.
+  - **Zero Enumeration**: Nonexistent accounts receive the same generic success response without disclosing registration state or dispatching messages.
+  - **Anti-Replay / Invalidation**: Overwrites any prior active OTP state for the recipient with fresh HMAC-SHA256 hash.
+  - **Zero Leakage**: Plaintext OTP is never returned in API payloads or logged in telemetry.
+
 #### `POST /api/v1/auth/login` `[CANONICAL - SPRINT 2.7, SPRINT 2.8 & SPRINT 2.9]`
 
 - **Description**: Authenticates user credentials (email & password) using Argon2id constant-time verification, validates account state (active & verified), updates `lastLoginAt`, and returns sanitized user profile along with a cryptographically signed short-lived JWT Access Token in the response body, and sets a long-lived cryptographically signed JWT Refresh Token in a secure HttpOnly cookie.

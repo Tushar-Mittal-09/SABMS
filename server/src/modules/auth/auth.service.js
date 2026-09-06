@@ -1478,6 +1478,73 @@ class AuthService {
 
     return { success: true };
   }
+
+  /**
+   * Dispatches a fresh verification OTP for email or phone (Sprint 2.15).
+   *
+   * Security Boundaries:
+   * - Restricts target types strictly to email or phone registration verification.
+   * - Never handles or triggers password resets to prevent mixing OTP purposes.
+   * - Strictly enforces 60-second cooldown and 5-attempt hourly resend caps.
+   * - Invalidates prior OTPs by overwriting active Redis state with new HMAC-SHA256 hash.
+   * - Preserves zero account enumeration for nonexistent users.
+   * - Never returns OTP in API payload or logs.
+   *
+   * @param {Object} params
+   * @param {string} params.type - OTP target ('email' | 'phone').
+   * @param {string} [params.email] - Target email for email OTP.
+   * @param {string} [params.phone] - Target phone for phone OTP.
+   * @returns {Promise<{ type: string, recipient: string }>}
+   */
+  async resendOtp({ type, email, phone }) {
+    const rawType = (type || '').toLowerCase().trim();
+    if (
+      rawType !== 'email' &&
+      rawType !== 'phone' &&
+      rawType !== 'email_verification' &&
+      rawType !== 'phone_verification'
+    ) {
+      throw AppError.badRequest(
+        'Invalid OTP purpose. Generic resend only supports "email" and "phone" verification'
+      );
+    }
+
+    if (rawType === 'email' || rawType === 'email_verification') {
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail) {
+        throw AppError.badRequest('Valid email address is required');
+      }
+
+      const user = await this._authRepository.findByEmail(normalizedEmail);
+      if (!user) {
+        logger.info('Generic OTP resend requested for non-existent email', {
+          context: 'AuthService',
+        });
+        return { type: 'email', recipient: normalizedEmail };
+      }
+
+      await this.sendEmailVerificationOtp(user);
+      return { type: 'email', recipient: normalizedEmail };
+    }
+
+    if (rawType === 'phone' || rawType === 'phone_verification') {
+      const normalizedPhone = normalizePhone(phone);
+      if (!normalizedPhone) {
+        throw AppError.badRequest('Valid phone number is required');
+      }
+
+      const user = await this._authRepository.findByPhone(normalizedPhone);
+      if (!user) {
+        logger.info('Generic OTP resend requested for non-existent phone', {
+          context: 'AuthService',
+        });
+        return { type: 'phone', recipient: normalizedPhone };
+      }
+
+      await this.sendPhoneVerificationOtp(user);
+      return { type: 'phone', recipient: normalizedPhone };
+    }
+  }
 }
 
 const authServiceInstance = new AuthService();

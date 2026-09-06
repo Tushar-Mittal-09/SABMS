@@ -303,11 +303,21 @@ class AppError extends Error {
   11. Returns standardized JSON success envelope (`200 OK`, `data: null`).
 - **Sprint Task**: Sprint 2.14 (Change Password).
 
-### SD-09: Resend Verification OTP
+### SD-09: Resend Verification OTP `[CANONICAL - SPRINT 2.15]`
 
-- **Purpose**: Re-issue verification OTP when previous code expires.
-- **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `Redis`, `Email/SMS Service`.
-- **Workflow**: Validates identifier → Checks resend cooldown in Redis (60s minimum interval, max 3/hr) → Generates new 6-digit OTP → Overwrites Redis key with refreshed 5 min TTL → Dispatches new OTP.
+- **Purpose**: Re-issue verification OTP for registration email or phone verification without mixing OTP purposes.
+- **Components**: `auth.routes.js`, `auth.schema.js`, `auth.controller.js`, `auth.service.js`, `auth.helper.js`, `auth.repository.js`, `Redis`, `email.service.js`, `sms.service.js`.
+- **Workflow**:
+  1. `POST /api/v1/auth/resend-otp` invoked with `{ "type": "email" | "phone", "email"?: string, "phone"?: string }`.
+  2. `validateBody(resendOtpSchema)` strictly validates purpose and corresponding identifier; rejects unsupported purposes (e.g. password resets).
+  3. `authService.resendOtp` normalizes target identifier.
+  4. Queries user by email or phone. Preserves zero enumeration for nonexistent accounts (returns generic success).
+  5. Enforces 60-second cooldown timer in Redis. Rejects with `429 Too Many Requests` if within cooldown window.
+  6. Enforces 5-resend attempt cap. Rejects with `429 Too Many Requests` if exceeded.
+  7. Generates cryptographically secure 6-digit numeric OTP (`crypto.randomInt`).
+  8. Computes HMAC-SHA256 hash and overwrites active Redis key with refreshed TTL.
+  9. Dispatches verification code via dedicated channel (`email.service` for email, `sms.service` for phone).
+  10. Returns standardized JSON success envelope (`200 OK`, `{ type, recipient }`).
 - **Sprint Task**: Sprint 2.15 (Resend OTP).
 
 ### SD-10: Verify Email with Token `[OPTIONAL / LEGACY REFERENCE]`

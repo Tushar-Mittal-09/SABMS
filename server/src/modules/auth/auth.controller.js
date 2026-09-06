@@ -241,6 +241,20 @@ class AuthController {
     });
     return res.success(null, 'Password updated successfully.');
   });
+
+  /**
+   * General OTP Resend Endpoint Handler (Sprint 2.15).
+   * POST /api/v1/auth/resend-otp
+   */
+  resendOtp = catchAsync(async (req, res) => {
+    const { type, purpose, email, phone } = req.body;
+    const result = await authService.resendOtp({
+      type: type || purpose,
+      email,
+      phone,
+    });
+    return res.success(result, 'Verification code sent successfully');
+  });
 }
 
 const authControllerInstance = new AuthController();

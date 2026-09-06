@@ -185,6 +185,78 @@ const changePasswordSchema = z
   })
   .strict();
 
+/**
+ * General OTP Resend Validation Contract (Sprint 2.15).
+ *
+ * Supported fields:
+ * - type: string ('email' | 'phone' | 'email_verification' | 'phone_verification')
+ * - purpose: string (alternative alias for type)
+ * - email: valid email (required when type/purpose is email)
+ * - phone: E.164 phone string (required when type/purpose is phone)
+ *
+ * Security Boundary:
+ * - Strict schema (.strict()) rejects unknown fields.
+ * - Enforces mutual exclusion: generic resend ONLY handles registration email/phone verification.
+ * - Explicitly rejects password reset codes to prevent mixing OTP purposes.
+ */
+const resendOtpSchema = z
+  .object({
+    type: z.string().optional(),
+    purpose: z.string().optional(),
+    email: email({ required: false }),
+    phone: phone({ required: false }),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    const raw = data.type || data.purpose;
+    if (!raw || typeof raw !== 'string') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'OTP type or purpose is required (must be "email" or "phone")',
+        path: ['type'],
+      });
+      return;
+    }
+
+    const normalized = raw.toLowerCase().trim();
+    if (
+      normalized !== 'email' &&
+      normalized !== 'phone' &&
+      normalized !== 'email_verification' &&
+      normalized !== 'phone_verification'
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Invalid OTP purpose. Generic resend only supports "email" and "phone" verification',
+        path: ['type'],
+      });
+      return;
+    }
+
+    if (
+      (normalized === 'email' || normalized === 'email_verification') &&
+      !data.email
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Email address is required for email verification OTP resend',
+        path: ['email'],
+      });
+    }
+
+    if (
+      (normalized === 'phone' || normalized === 'phone_verification') &&
+      !data.phone
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Phone number is required for phone verification OTP resend',
+        path: ['phone'],
+      });
+    }
+  });
+
 module.exports = {
   registerSchema,
   verifyEmailSchema,
@@ -195,4 +267,5 @@ module.exports = {
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  resendOtpSchema,
 };

@@ -15,6 +15,7 @@ const {
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  resendOtpSchema,
 } = require('./auth.schema');
 const authController = require('./auth.controller');
 
@@ -81,6 +82,14 @@ router.post(
   authenticate,
   validateBody(changePasswordSchema),
   authController.changePassword
+);
+
+// ─── General OTP Resend Route (Sprint 2.15) ─────────────────────────────────
+
+router.post(
+  '/resend-otp',
+  validateBody(resendOtpSchema),
+  authController.resendOtp
 );
 
 module.exports = {

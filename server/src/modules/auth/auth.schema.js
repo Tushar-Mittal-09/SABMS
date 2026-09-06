@@ -163,6 +163,28 @@ const resetPasswordSchema = z
   })
   .strict();
 
+/**
+ * Change Password Validation Contract (Sprint 2.14).
+ *
+ * Accepted fields:
+ * - currentPassword: string (required)
+ * - newPassword: valid password adhering to complexity policy (8-128 chars, required)
+ * - logoutOtherDevices: boolean (optional, default false)
+ *
+ * Security Boundary:
+ * - Strict schema (.strict()) rejects unknown fields.
+ * - Plaintext passwords are never trimmed or mutated.
+ */
+const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string({ required_error: 'Current password is required' })
+      .min(1, 'Current password is required'),
+    newPassword: password({ required: true }),
+    logoutOtherDevices: z.boolean().optional().default(false),
+  })
+  .strict();
+
 module.exports = {
   registerSchema,
   verifyEmailSchema,
@@ -172,4 +194,5 @@ module.exports = {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 };

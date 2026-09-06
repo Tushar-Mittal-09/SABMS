@@ -217,6 +217,30 @@ class AuthController {
       'Password reset successful. All active sessions have been terminated. Please log in.'
     );
   });
+
+  /**
+   * Authenticated Password Change Endpoint Handler (Sprint 2.14).
+   * POST /api/v1/auth/change-password
+   *
+   * Security Boundaries:
+   * - Requires authenticated access token (req.user).
+   * - Validates currentPassword and newPassword strictly via changePasswordSchema.
+   * - Verifies current password before updating.
+   * - Hashes new password with Argon2id.
+   * - Optionally revokes other active sessions if logoutOtherDevices is set.
+   * - Never exposes passwords or tokens in response.
+   */
+  changePassword = catchAsync(async (req, res) => {
+    const userId = req.user?.id || req.user?.sub;
+    const { currentPassword, newPassword, logoutOtherDevices } = req.body;
+    await authService.changePassword({
+      userId,
+      currentPassword,
+      newPassword,
+      logoutOtherDevices: Boolean(logoutOtherDevices),
+    });
+    return res.success(null, 'Password updated successfully.');
+  });
 }
 
 const authControllerInstance = new AuthController();

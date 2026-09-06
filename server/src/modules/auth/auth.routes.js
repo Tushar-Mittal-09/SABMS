@@ -4,6 +4,7 @@ const express = require('express');
 const {
   validateBody,
 } = require('../../core/middleware/validateRequest.middleware');
+const { authenticate } = require('../../core/middleware/auth.middleware');
 const {
   registerSchema,
   verifyEmailSchema,
@@ -13,6 +14,7 @@ const {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 } = require('./auth.schema');
 const authController = require('./auth.controller');
 
@@ -70,6 +72,15 @@ router.post(
   '/reset-password',
   validateBody(resetPasswordSchema),
   authController.resetPassword
+);
+
+// ─── Change Password Route (Sprint 2.14) ────────────────────────────────────
+
+router.post(
+  '/change-password',
+  authenticate,
+  validateBody(changePasswordSchema),
+  authController.changePassword
 );
 
 module.exports = {

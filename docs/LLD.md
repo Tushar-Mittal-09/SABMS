@@ -285,11 +285,22 @@ class AppError extends Error {
   - **Logout & Session Termination**: Sprint 2.11 `[IMPLEMENTED]`.
 - **Sprint Task**: Sprint 2.9, Sprint 2.10 & Sprint 2.11 (Refresh Token, Single-Use Rotation, Reuse Detection & Logout Revocation).
 
-### SD-08: Change Password
+### SD-08: Change Password `[CANONICAL - SPRINT 2.14]`
 
-- **Purpose**: Authenticated user updates account password.
-- **Components**: `auth.routes.js`, `auth.middleware.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `Redis`, `Email Service`.
-- **Workflow**: Verifies active JWT session → Verifies current password against stored hash → Hashes new password → Updates MongoDB → Revokes other active sessions in Redis (or refreshes current) → Dispatches security notification email.
+- **Purpose**: Authenticated user updates account password with optional revocation of other active sessions.
+- **Components**: `auth.routes.js`, `auth.middleware.js`, `auth.schema.js`, `auth.controller.js`, `auth.service.js`, `password.service.js`, `auth.repository.js`, `user.model.js`, `refresh-token.model.js`, `email.service.js`.
+- **Workflow**:
+  1. `POST /api/v1/auth/change-password` invoked with `Authorization: Bearer <accessToken>`.
+  2. `authenticate` middleware cryptographically verifies the access token and injects verified `req.user`.
+  3. `validateBody(changePasswordSchema)` strictly validates presence of `currentPassword` and complexity of `newPassword` (`.strict()`).
+  4. `authService.changePassword` fetches user record by ID from MongoDB (`authRepository.findById`).
+  5. Verifies current password candidate against stored hash using timing-safe Argon2id verification (`verifyPassword`).
+  6. Rejects with `400 Bad Request` if `newPassword === currentPassword`.
+  7. Hashes `newPassword` with Argon2id (`passwordService.hashPassword`).
+  8. Updates user's `passwordHash` in MongoDB (`authRepository.updateUserById`).
+  9. If `logoutOtherDevices` is `true`, revokes all active refresh tokens for the user in MongoDB (`authRepository.revokeAllUserTokens`).
+  10. Dispatches security confirmation notice via email service.
+  11. Returns standardized JSON success envelope (`200 OK`, `data: null`).
 - **Sprint Task**: Sprint 2.14 (Change Password).
 
 ### SD-09: Resend Verification OTP

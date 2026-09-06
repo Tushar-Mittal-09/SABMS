@@ -16,8 +16,10 @@ const {
   validateCookies,
   validateAsync,
 } = require('./validateRequest.middleware');
+const { authenticate } = require('./auth.middleware');
 
 module.exports = {
+  authenticate,
   errorHandler,
   requestId,
   responseHandler,

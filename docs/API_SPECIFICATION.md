@@ -530,6 +530,12 @@
     "meta": null
   }
   ```
+- **Security Boundaries & Invariants (Sprint 2.14)**:
+  - **Authentication Required**: Protected route requiring valid, non-expired `Bearer <accessToken>`.
+  - **Credential Verification**: Current password must be verified with timing-safe Argon2id before update.
+  - **Password Complexity**: New password must adhere to password security policy and must not match current password.
+  - **Zero Plaintext Storage**: Plaintext passwords are never stored, logged, or exposed in responses.
+  - **Session Revocation**: When `logoutOtherDevices: true`, terminates all active refresh tokens for the user account.
 
 #### `GET /api/v1/auth/me`
 

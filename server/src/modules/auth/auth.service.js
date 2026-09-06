@@ -1362,6 +1362,122 @@ class AuthService {
 
     return { success: true };
   }
+
+  /**
+   * Updates an authenticated user's password (Sprint 2.14).
+   *
+   * Security Guarantees:
+   * - Requires authenticated user identity (userId).
+   * - Verifies current password using timing-safe Argon2id verification.
+   * - Validates new password against complexity policy before hashing.
+   * - Hashes new password with Argon2id with unique salt.
+   * - Atomically updates user in MongoDB.
+   * - If logoutOtherDevices is true, revokes all active refresh tokens for this user.
+   * - Never logs plaintext passwords or password hashes.
+   * - Never returns passwords or tokens in response payload.
+   *
+   * @param {Object} params
+   * @param {string} params.userId - Authenticated user identifier.
+   * @param {string} params.currentPassword - Plaintext current password.
+   * @param {string} params.newPassword - Plaintext new password adhering to policy.
+   * @param {boolean} [params.logoutOtherDevices=false] - Whether to revoke other active sessions.
+   * @returns {Promise<{ success: boolean }>}
+   */
+  async changePassword({
+    userId,
+    currentPassword,
+    newPassword,
+    logoutOtherDevices = false,
+  }) {
+    if (!userId) {
+      throw AppError.unauthorized(
+        'Access denied. No authentication token provided.'
+      );
+    }
+
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      throw AppError.badRequest('Current password is required');
+    }
+
+    if (!newPassword || typeof newPassword !== 'string') {
+      throw AppError.badRequest('New password is required');
+    }
+
+    // 1. Fetch user by ID from MongoDB
+    const user = await this._authRepository.findById(userId);
+    if (!user) {
+      throw AppError.notFound('User account not found');
+    }
+
+    // 2. Verify current password against stored hash using timing-safe comparison
+    const isCurrentPasswordValid = await verifyPassword(
+      currentPassword,
+      user.passwordHash
+    );
+
+    if (!isCurrentPasswordValid) {
+      throw AppError.unauthorized('Invalid current password.');
+    }
+
+    // 3. Prevent reuse of identical password
+    if (currentPassword === newPassword) {
+      throw AppError.badRequest(
+        'New password must be different from current password'
+      );
+    }
+
+    // 4. Hash new password with Argon2id (validates password policy internally)
+    const passwordHash = await hashPassword(newPassword);
+
+    // 5. Update user's password in MongoDB
+    const updatedUser = await this._authRepository.updateUserById(userId, {
+      passwordHash,
+    });
+
+    if (!updatedUser) {
+      throw AppError.internal('Failed to update password');
+    }
+
+    // 6. If requested, revoke all active sessions / token families across other devices
+    if (logoutOtherDevices) {
+      try {
+        await this._authRepository.revokeAllUserTokens(
+          userId,
+          REFRESH_TOKEN_REVOCATION_REASONS.PASSWORD_RESET ||
+            'Password changed - other devices terminated'
+        );
+      } catch (err) {
+        logger.warn(
+          `Failed to revoke user tokens on password change for ${userId}: ${err.message}`,
+          { context: 'AuthService' }
+        );
+      }
+    }
+
+    // 7. Send security notice email
+    try {
+      if (
+        typeof this._emailService.sendPasswordResetConfirmation === 'function'
+      ) {
+        await this._emailService.sendPasswordResetConfirmation({
+          to: user.email,
+          name: user.name,
+        });
+      }
+    } catch (emailErr) {
+      logger.warn(
+        `Failed to dispatch password change confirmation email: ${emailErr.message}`,
+        { context: 'AuthService' }
+      );
+    }
+
+    logger.info('Password successfully changed for user', {
+      context: 'AuthService',
+      userId,
+    });
+
+    return { success: true };
+  }
 }
 
 const authServiceInstance = new AuthService();

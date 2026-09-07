@@ -44,8 +44,8 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 ├─────────────────────────────────────┬─────────────────────────────────────┤
 │            ACCESS TOKEN             │            REFRESH TOKEN            │
 ├─────────────────────────────────────┼─────────────────────────────────────┤
-│ Format: JSON Web Token (JWT)        │ Format: Opaque Random String        │
-│ Entropy: Signed HMAC-SHA256         │ Entropy: 64-byte CSPRNG hex string  │
+│ Format: JSON Web Token (JWT)        │ Format: Signed JSON Web Token (JWT) │
+│ Entropy: Signed HMAC-SHA256         │ Entropy: Signed HMAC-SHA256 (jti)   │
 │ Lifespan: ~15 Minutes (Short-lived) │ Lifespan: ~7 Days (Long-lived)      │
 │ Transmission: Authorization Header  │ Transmission: HttpOnly Secure Cookie│
 │ Storage: Client In-Memory (Zustand) │ Storage: Browser Cookie Store       │
@@ -62,7 +62,7 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 
 1. **Cryptographic Verification**: Incoming refresh token from HttpOnly cookie is strictly verified (`signature`, `algorithm`, `issuer`, `audience`, `type: 'refresh'`, `jti`, `familyId`) before performing any persistence operations. Unverified claims (`jwt.decode()`) are never trusted for mutation.
 2. **Family-Wide Revocation**: The service locates the token record by `jti` and atomically revokes all active and consumed tokens across the entire `familyId` in MongoDB (`status` transitions to `REVOKED` with reason `USER_LOGOUT`).
-3. **Cookie Invalidation**: The HttpOnly refresh cookie is cleared with identical attributes (`Path=/api/v1/auth/refresh`, `SameSite=Strict`, `HttpOnly`, `Secure`).
+3. **Cookie Invalidation**: The HttpOnly refresh cookie is cleared with identical attributes (`Path=/api/v1/auth`, `SameSite=Strict`, `HttpOnly`, `Secure`).
 4. **Idempotency**: Requests with missing cookies, expired tokens, or already revoked families succeed safely (`200 OK`) and clear cookies without error or information disclosure.
 5. **Access-Token Boundary**: Access tokens expire naturally via their short TTL (~15m); no server-side access-token blacklist is maintained in Sprint 2.11.
 
@@ -104,12 +104,13 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 - **Memory Cost**: 65,536 KB (64 MB)
 - **Time Cost**: 3 iterations
 - **Parallelism**: 4 threads
-- **Salt Generation**: Cryptographically secure 16-byte random salt generated per hash operation by native Argon2 bindings.
+- **Salt Generation**: Cryptographically secure 16-byte random salt generated per hash operation by native Argon2 bindings. (No server-side pepper is applied).
 
 ### 5.2 Password Policy
 
 - **Length**: 8 to 128 characters
 - **Complexity**: Minimum 1 uppercase (`[A-Z]`), 1 lowercase (`[a-z]`), 1 number (`[0-9]`), 1 special character (`[@$!%*?&#^~_-]`).
+- **History**: Password history is not retained; password updates strictly prevent reusing the current active password candidate.
 - **Isolation Boundary**: Hashing and verification reside exclusively in [`server/src/services/password.service.js`](file:///d:/SABMS/server/src/services/password.service.js).
 
 ### 5.3 Login Credential Verification & JWT Token Policy (Sprint 2.7, Sprint 2.8 & Sprint 2.9)
@@ -118,7 +119,7 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 - **Anti-Account Enumeration**: Generic `401 Unauthorized` with client message `"Invalid email or password."` is returned identically for nonexistent accounts and incorrect password candidates.
 - **Account State Verification**: Authentication validates that the user account is verified (`isEmailVerified === true`) and not deactivated/suspended (`status !== 'SUSPENDED'` and `status !== 'INACTIVE'`).
 - **Access Token Issuance (Sprint 2.8)**: Upon successful credential and account validation, backend issues a cryptographically signed HMAC-SHA256 JWT access token with 15-minute TTL, signed with `JWT_ACCESS_SECRET`, containing only minimal non-sensitive registered claims (`sub`, `role`, `iat`, `exp`, `iss`, `aud`).
-- **Refresh Token & Cookie Issuance (Sprint 2.9)**: Backend issues a long-lived JWT refresh token with 7-day TTL signed with dedicated `JWT_REFRESH_SECRET`, containing minimal claims (`sub`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`), delivered exclusively via an `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth/refresh` cookie (with `Secure` in production). Refresh tokens are NEVER exposed to client JavaScript or returned in JSON responses.
+- **Refresh Token & Cookie Issuance (Sprint 2.9)**: Backend issues a long-lived JWT refresh token with 7-day TTL signed with dedicated `JWT_REFRESH_SECRET`, containing minimal claims (`sub`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`), delivered exclusively via an `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth` cookie (with `Secure` in production). Refresh tokens are NEVER exposed to client JavaScript or returned in JSON responses.
 - **Sprint Boundaries**:
   - Access Tokens (JWT): Sprint 2.8 `[IMPLEMENTED]`.
   - Refresh Tokens & HttpOnly Cookie: Sprint 2.9 `[IMPLEMENTED]`.
@@ -151,7 +152,7 @@ SABMS employs a **Dual-Token Architecture** to balance stateless API throughput 
 | :------------------------- | :----------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Credential Stuffing**    | Automated testing of leaked credential pairs from other platforms. | Strict IP/email rate limiting via Redis; automatic account lockout after 5 consecutive failures with exponential backoff.                                                                                                                                                                                                                                                                                   |
 | **Brute-Force Login**      | Dictionary and automated wordlist attacks against user passwords.  | Memory-hard Argon2id hashing; constant-time delay simulation on failure; IP rate limiting.                                                                                                                                                                                                                                                                                                                  |
-| **OTP Brute Force**        | Guessing 6-digit verification codes (1 in 1,000,000 probability).  | Maximum 5 failed attempts per OTP key before instant invalidation; 5-minute strict TTL in Redis; minimum 60s resend cooldown.                                                                                                                                                                                                                                                                               |
+| **OTP Brute Force**        | Guessing 6-digit verification codes (1 in 1,000,000 probability).  | Maximum 5 failed attempts per OTP key before instant invalidation; 10-minute TTL for registration, 5-minute TTL for password reset; minimum 60s resend cooldown.                                                                                                                                                                                                                                            |
 | **Refresh Token Theft**    | Exfiltration of long-lived refresh tokens.                         | Transmitted exclusively via `HttpOnly`, `Secure`, `SameSite=Strict` cookies; JavaScript runtime access is impossible.                                                                                                                                                                                                                                                                                       |
 | **Refresh Token Replay**   | Reusing an expired or stolen refresh token.                        | **Single-Use Rotation**: Using an already-consumed refresh token immediately triggers **Token Family Revocation**, killing all active sessions.                                                                                                                                                                                                                                                             |
 | **Session Hijacking**      | Stealing session identifiers to impersonate legitimate users.      | Session binding with client IP subnet (/24) and User-Agent fingerprint validation; instant family revocation on mismatch; one-click "Logout from all devices" (`DELETE /api/v1/auth/sessions`).                                                                                                                                                                                                             |

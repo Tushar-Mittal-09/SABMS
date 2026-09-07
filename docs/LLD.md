@@ -259,7 +259,7 @@ class AppError extends Error {
      - If verification fails (expired, malformed, invalid signature), safely returns without trusting unverified claims for database mutation.
   4. Queries persistent token record by `jti` via `authRepository.findRefreshTokenByJti(jti)`.
   5. Atomically revokes all active and consumed tokens across the `familyId` via `authRepository.revokeTokenFamily(familyId, 'USER_LOGOUT')`.
-  6. `authController` clears the HttpOnly refresh token cookie matching configured attributes (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth/refresh`, `Secure`).
+  6. `authController` clears the HttpOnly refresh token cookie matching configured attributes (`HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth`, `Secure`).
   7. Returns standardized JSON success envelope (`200 OK`, `data: null`).
   8. Access tokens expire naturally via short TTL (~15m); no server-side blacklist is maintained in Sprint 2.11.
 - **Sprint Task**: Sprint 2.11 (Logout & Token/Session Invalidation).
@@ -296,7 +296,7 @@ class AppError extends Error {
   4. `authService.changePassword` fetches user record by ID from MongoDB (`authRepository.findById`).
   5. Verifies current password candidate against stored hash using timing-safe Argon2id verification (`verifyPassword`).
   6. Rejects with `400 Bad Request` if `newPassword === currentPassword`.
-  7. Hashes `newPassword` with Argon2id (`passwordService.hashPassword`).
+  7. Hashes `newPassword` with Argon2id (`passwordService.hashPassword`). (Uses per-hash random salt; no server-side pepper is applied. Password history is not retained).
   8. Updates user's `passwordHash` in MongoDB (`authRepository.updateUserById`).
   9. If `logoutOtherDevices` is `true`, revokes all active refresh tokens for the user in MongoDB (`authRepository.revokeAllUserTokens`).
   10. Dispatches security confirmation notice via email service.
@@ -343,7 +343,7 @@ class AppError extends Error {
 
 - **Purpose**: Defend against automated credential stuffing and brute-force attacks.
 - **Components**: `auth.service.js`, `auth.repository.js`, `Redis`, `email.service.js`.
-- **Workflow**: On invalid credentials attempt, increments Redis failure counter (`lockout:<normalizedEmail>`) with 15 min (900s) TTL → If failure count reaches 5 attempts, sets lock status → Rejects subsequent attempts with `429 Too Many Requests` (fast fail before database lookup) → Dispatches automated security alert notice email (`sendAccountLockoutAlert`). Successful login clears the lockout key.
+- **Workflow**: On invalid credentials attempt, increments Redis failure counter (`lockout:<normalizedEmail>`) with 15 min (900s) TTL. When failed attempts reach exactly 5 consecutive failures, the account locks for 15 minutes. Rejects subsequent attempts with `429 Too Many Requests` (fast fail before database lookup) and dispatches automated security alert notice email (`sendAccountLockoutAlert`). Successful login clears the lockout key and failure counter.
 - **Sprint Task**: Sprint 2.7 & 2.17 (Login & Rate Limiting).
 
 ### SD-14: Account Unlock `[IMPLEMENTED]`
@@ -376,3 +376,10 @@ class AppError extends Error {
 - **Components**: `auth.routes.js`, `auth.controller.js`, `auth.service.js`, `Redis`, `user.repository.js`, `user.model.js`.
 - **Workflow**: User submits `{ phone, otp }` → Service fetches phone OTP hash from Redis → Validates match & attempt limit → If valid: marks `isPhoneVerified: true` on User document, deletes Redis OTP key.
 - **Sprint Task**: Sprint 2.6 (Phone OTP Verification).
+
+### SD-18: Input Sanitization & XSS Defense `[IMPLEMENTED - SPRINT 2.19]`
+
+- **Purpose**: Prevent Cross-Site Scripting (XSS) via request payloads while preserving password characters.
+- **Components**: `xss.middleware.js`, Express application pipeline.
+- **Workflow**: Global middleware intercepts incoming `req.body`, `req.query`, and `req.params`. Recursively traverses objects and strips dangerous constructs (`<script>`, inline `on*` event handlers, and `javascript:` URIs) using custom regular expressions (custom regex stripper, not DOMPurify/jsdom). Sensitive fields (`password`, `newPassword`, `currentPassword`, `confirmPassword`) are strictly excluded from sanitization to preserve entropy and user-selected special characters.
+- **Sprint Task**: Sprint 2.19 (XSS Protection).

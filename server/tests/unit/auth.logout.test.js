@@ -21,6 +21,7 @@ const {
   REFRESH_TOKEN_REVOCATION_REASONS,
 } = require('../../src/modules/auth/auth.constants');
 const { hashPassword } = require('../../src/services/password.service');
+const AppError = require('../../src/core/errors/AppError');
 const logger = require('../../src/core/logger');
 
 describe('Logout & Token/Session Invalidation (Sprint 2.11)', () => {
@@ -145,6 +146,25 @@ describe('Logout & Token/Session Invalidation (Sprint 2.11)', () => {
           if (token.familyId === familyId) tokens.push(token);
         }
         return tokens;
+      });
+
+    jest.spyOn(authRepository, 'findById').mockResolvedValue(mockActiveUser);
+
+    jest
+      .spyOn(authRepository, 'revokeAllUserSessionsExcept')
+      .mockImplementation(async (userId, currentFamilyId) => {
+        let count = 0;
+        for (const token of inMemoryTokenMap.values()) {
+          if (
+            String(token.userId) === String(userId) &&
+            token.familyId !== currentFamilyId &&
+            token.status === REFRESH_TOKEN_STATUSES.ACTIVE
+          ) {
+            token.status = REFRESH_TOKEN_STATUSES.REVOKED;
+            count++;
+          }
+        }
+        return { modifiedCount: count };
       });
   });
 
@@ -822,10 +842,10 @@ describe('Logout & Token/Session Invalidation (Sprint 2.11)', () => {
       expect(cookies[0]).toMatch(new RegExp(`^${cookieName}=`));
     });
 
-    it('44. Cookie clear path matches refresh cookie path (/api/v1/auth/refresh)', async () => {
+    it('44. Cookie clear path matches refresh cookie path (/api/v1/auth)', async () => {
       const res = await request(app).post('/api/v1/auth/logout');
       const cookie = res.headers['set-cookie'][0];
-      expect(cookie).toMatch(/Path=\/api\/v1\/auth\/refresh/i);
+      expect(cookie).toMatch(/Path=\/api\/v1\/auth(;|$)/i);
     });
 
     it('45. Secure behavior is preserved in cookie options', () => {
@@ -927,6 +947,146 @@ describe('Logout & Token/Session Invalidation (Sprint 2.11)', () => {
       expect(inMemoryTokenMap.get(jti).status).toBe(
         REFRESH_TOKEN_STATUSES.REVOKED
       );
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // H-01 AUDIT REGRESSION: BROWSER-EQUIVALENT COOKIE PATH (/api/v1/auth)
+    // ─────────────────────────────────────────────────────────────────────────
+    describe('H-01 Regression: Browser Cookie Path & Session Invalidation', () => {
+      it('H-01.1 Login establishes Set-Cookie strictly scoped to Path=/api/v1/auth', async () => {
+        jest
+          .spyOn(authRepository, 'findByEmailWithPasswordHash')
+          .mockResolvedValue(mockActiveUser);
+        jest
+          .spyOn(authRepository, 'updateLastLogin')
+          .mockResolvedValue(mockActiveUser);
+
+        const loginRes = await request(app).post('/api/v1/auth/login').send({
+          email: 'jane.doe@university.edu',
+          password: 'ValidPass123!',
+        });
+
+        expect(loginRes.status).toBe(200);
+        const setCookieHeaders = loginRes.headers['set-cookie'];
+        expect(setCookieHeaders).toBeDefined();
+
+        const refreshCookie = setCookieHeaders.find((c) =>
+          c.startsWith(`${cookieName}=`)
+        );
+        expect(refreshCookie).toBeDefined();
+        expect(refreshCookie).toMatch(/Path=\/api\/v1\/auth(;|$)/i);
+        expect(refreshCookie).not.toMatch(/Path=\/api\/v1\/auth\/refresh/i);
+        expect(refreshCookie).toMatch(/HttpOnly/i);
+        expect(refreshCookie).toMatch(/SameSite=Strict/i);
+      });
+
+      it('H-01.2 Browser-equivalent logout receives cookie, revokes family, and clears cookie with Path=/api/v1/auth', async () => {
+        jest
+          .spyOn(authRepository, 'findByEmailWithPasswordHash')
+          .mockResolvedValue(mockActiveUser);
+        jest
+          .spyOn(authRepository, 'updateLastLogin')
+          .mockResolvedValue(mockActiveUser);
+
+        // 1. Login to establish cookie
+        const loginRes = await request(app).post('/api/v1/auth/login').send({
+          email: 'jane.doe@university.edu',
+          password: 'ValidPass123!',
+        });
+        expect(loginRes.status).toBe(200);
+        const setCookieHeader = loginRes.headers['set-cookie'][0];
+        const rawCookie = setCookieHeader.split(';')[0]; // refreshToken=<jwt>
+
+        // 2. Extract token and check inMemoryTokenMap
+        const tokenVal = rawCookie.split('=')[1];
+        const decoded = jwt.decode(tokenVal);
+        const jti = decoded.jti;
+        const familyId = decoded.familyId;
+
+        expect(inMemoryTokenMap.get(jti)).toBeDefined();
+        expect(inMemoryTokenMap.get(jti).status).toBe(
+          REFRESH_TOKEN_STATUSES.ACTIVE
+        );
+
+        // 3. Browser sends cookie to POST /api/v1/auth/logout
+        const logoutRes = await request(app)
+          .post('/api/v1/auth/logout')
+          .set('Cookie', [rawCookie]);
+
+        expect(logoutRes.status).toBe(200);
+        expect(logoutRes.body.success).toBe(true);
+
+        // 4. Token family revoked
+        expect(inMemoryTokenMap.get(jti).status).toBe(
+          REFRESH_TOKEN_STATUSES.REVOKED
+        );
+
+        // 5. Subsequent refresh using revoked token fails
+        await expect(authService.refreshAccessToken(tokenVal)).rejects.toThrow(
+          AppError
+        );
+
+        // 6. Cookie is cleared with Path=/api/v1/auth
+        const clearCookieHeaders = logoutRes.headers['set-cookie'];
+        expect(clearCookieHeaders).toBeDefined();
+        const clearedRefreshCookie = clearCookieHeaders.find((c) =>
+          c.startsWith(`${cookieName}=`)
+        );
+        expect(clearedRefreshCookie).toBeDefined();
+        expect(clearedRefreshCookie).toMatch(/Path=\/api\/v1\/auth(;|$)/i);
+      });
+
+      it('H-01.3 Browser-equivalent DELETE /api/v1/auth/sessions preserves current session and revokes other sessions', async () => {
+        // Setup user with 2 active sessions in family 1 (current) and family 2 (other)
+        const currentFamilyId = 'family-current-browser';
+        const currentJti = 'jti-current-browser';
+        const otherFamilyId = 'family-other-browser';
+        const otherJti = 'jti-other-browser';
+
+        const currentToken = generateRefreshToken(mockActiveUser, {
+          jti: currentJti,
+          familyId: currentFamilyId,
+        });
+        const otherToken = generateRefreshToken(mockActiveUser, {
+          jti: otherJti,
+          familyId: otherFamilyId,
+        });
+
+        await authRepository.createRefreshToken({
+          jti: currentJti,
+          familyId: currentFamilyId,
+          userId: mockActiveUser._id,
+          status: REFRESH_TOKEN_STATUSES.ACTIVE,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+
+        await authRepository.createRefreshToken({
+          jti: otherJti,
+          familyId: otherFamilyId,
+          userId: mockActiveUser._id,
+          status: REFRESH_TOKEN_STATUSES.ACTIVE,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+
+        const accessToken = generateAccessToken(mockActiveUser);
+
+        // DELETE /api/v1/auth/sessions with current cookie
+        const res = await request(app)
+          .delete('/api/v1/auth/sessions')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .set('Cookie', [`${cookieName}=${currentToken}`]);
+
+        expect(res.status).toBe(200);
+
+        // Current session remains ACTIVE
+        expect(inMemoryTokenMap.get(currentJti).status).toBe(
+          REFRESH_TOKEN_STATUSES.ACTIVE
+        );
+        // Other session is REVOKED
+        expect(inMemoryTokenMap.get(otherJti).status).toBe(
+          REFRESH_TOKEN_STATUSES.REVOKED
+        );
+      });
     });
   });
 });

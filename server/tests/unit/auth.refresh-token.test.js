@@ -251,7 +251,8 @@ describe('JWT Refresh Token & Cookie Issuance (Sprint 2.9)', () => {
 
       // Verify cookie security attributes
       expect(refreshCookie).toMatch(/HttpOnly/i);
-      expect(refreshCookie).toMatch(/Path=\/api\/v1\/auth\/refresh/i);
+      expect(refreshCookie).toMatch(/Path=\/api\/v1\/auth(;|$)/i);
+      expect(refreshCookie).not.toMatch(/Path=\/api\/v1\/auth\/refresh/i);
       expect(refreshCookie).toMatch(/SameSite=Strict/i);
       expect(refreshCookie).toMatch(/Max-Age=604800/i);
     });
@@ -599,7 +600,7 @@ describe('JWT Refresh Token & Cookie Issuance (Sprint 2.9)', () => {
         JWT_REFRESH_COOKIE_SAME_SITE || 'strict'
       );
       expect(devCookieOptions.path).toBe(
-        JWT_REFRESH_COOKIE_PATH || '/api/v1/auth/refresh'
+        JWT_REFRESH_COOKIE_PATH || '/api/v1/auth'
       );
       expect(devCookieOptions.maxAge).toBe(7 * 24 * 60 * 60 * 1000);
 

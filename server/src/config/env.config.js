@@ -45,7 +45,7 @@ const envSchema = z
       .min(16, 'JWT_REFRESH_SECRET must be at least 16 characters long'),
     JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
     JWT_REFRESH_COOKIE_NAME: z.string().default('refreshToken'),
-    JWT_REFRESH_COOKIE_PATH: z.string().default('/api/v1/auth/refresh'),
+    JWT_REFRESH_COOKIE_PATH: z.string().default('/api/v1/auth'),
     JWT_REFRESH_COOKIE_SAME_SITE: z
       .enum(['strict', 'lax', 'none'])
       .default('strict'),

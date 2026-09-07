@@ -431,7 +431,7 @@ describe('Single-Use Refresh Token Rotation & Reuse Detection (Sprint 2.10)', ()
       expect(cookie).toMatch(/SameSite=Strict/i);
     });
 
-    it('23. Refresh cookie has correct path (/api/v1/auth/refresh)', async () => {
+    it('23. Refresh cookie has correct path (/api/v1/auth)', async () => {
       jest
         .spyOn(authRepository, 'findByEmailWithPasswordHash')
         .mockResolvedValue(mockActiveUser);
@@ -445,7 +445,8 @@ describe('Single-Use Refresh Token Rotation & Reuse Detection (Sprint 2.10)', ()
       });
 
       const cookie = res.headers['set-cookie'][0];
-      expect(cookie).toMatch(/Path=\/api\/v1\/auth\/refresh/i);
+      expect(cookie).toMatch(/Path=\/api\/v1\/auth(;|$)/i);
+      expect(cookie).not.toMatch(/Path=\/api\/v1\/auth\/refresh/i);
     });
 
     it('24. Refresh cookie is secure in production configuration', () => {

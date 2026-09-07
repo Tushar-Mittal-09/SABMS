@@ -804,7 +804,7 @@ const getRefreshTokenCookieOptions = (options = {}) => {
       options.path ||
       config.jwt?.refreshCookiePath ||
       JWT_POLICY.REFRESH_COOKIE_PATH ||
-      '/api/v1/auth/refresh',
+      '/api/v1/auth',
     maxAge:
       options.maxAge !== undefined
         ? options.maxAge

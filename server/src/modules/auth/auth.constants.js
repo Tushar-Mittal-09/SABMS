@@ -76,7 +76,7 @@ const AUTH_CONSTANTS = Object.freeze({
     DEFAULT_AUDIENCE: 'sabms-client',
     REFRESH_TOKEN_PURPOSE: 'refresh',
     REFRESH_COOKIE_NAME: 'refreshToken',
-    REFRESH_COOKIE_PATH: '/api/v1/auth/refresh',
+    REFRESH_COOKIE_PATH: '/api/v1/auth',
     REFRESH_COOKIE_SAME_SITE: 'strict',
     REFRESH_COOKIE_MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
   }),

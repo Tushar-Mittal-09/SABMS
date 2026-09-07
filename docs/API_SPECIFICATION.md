@@ -574,29 +574,7 @@
   - **Zero Plaintext Storage**: Plaintext passwords are never stored, logged, or exposed in responses.
   - **Session Revocation**: When `logoutOtherDevices: true`, terminates all active refresh tokens for the user account.
 
-#### `GET /api/v1/auth/me`
-
-- **Description**: Retrieves current authenticated user context and permissions.
-- **Access**: Authenticated (`Bearer <accessToken>`)
-- **Success Response (`200 OK`)**:
-  ```json
-  {
-    "success": true,
-    "message": "Profile retrieved.",
-    "data": {
-      "id": "64a7f8e9c1d2e3f4a5b6c7d8",
-      "name": "Jane Doe",
-      "email": "jane.doe@university.edu",
-      "role": "FACULTY",
-      "department": "Computer Science",
-      "isEmailVerified": true,
-      "isPhoneVerified": true
-    },
-    "meta": null
-  }
-  ```
-
-#### `GET /api/v1/auth/sessions`
+#### `GET /api/v1/auth/sessions` `[SPRINT 2.16]`
 
 - **Description**: Lists all active concurrent sessions for the authenticated user.
 - **Access**: Authenticated (`Bearer <accessToken>`)

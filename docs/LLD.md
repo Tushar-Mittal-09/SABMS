@@ -6,6 +6,8 @@
 
 ## 1. Internal Module Architecture
 
+### 1.1 Backend Canonical Architecture (Modular Monolith)
+
 Every module inside `server/src/modules/<module_name>/` follows the clean **Feature/Module Based Architecture** with flat files:
 
 ```text
@@ -23,29 +25,79 @@ server/src/
 │   ├── middleware/          # Security, request ID, error handler & validation middleware
 │   └── response/            # Standardized ApiResponse envelope handler
 ├── modules/
-│   ├── auth/                # Authentication module (Flat 8-file layout)
-│   │   ├── auth.constants.js
-│   │   ├── auth.controller.js
-│   │   ├── auth.helper.js
-│   │   ├── auth.repository.js
-│   │   ├── auth.response.js
-│   │   ├── auth.routes.js
-│   │   ├── auth.schema.js
-│   │   └── auth.service.js
+│   ├── auth/                # Canonical Authentication module
+│   │   ├── auth.constants.js    # Security policies, token lifespans, rate limits & cookie options
+│   │   ├── auth.controller.js   # HTTP parameters extraction, cookie dispatch & ApiResponse handlers
+│   │   ├── auth.helper.js       # Pure cryptographic helpers (JWT, device fingerprint, OTP HMAC)
+│   │   ├── auth.repository.js   # Encapsulated Mongoose queries and atomic Redis operations
+│   │   ├── auth.response.js     # Data sanitization transformers (strips passwordHash, __v)
+│   │   ├── auth.routes.js       # Express route mappings, guards, and middleware bindings
+│   │   ├── auth.schema.js       # Strict Zod request schemas (.strict())
+│   │   ├── auth.service.js      # Core domain logic, state rules, invariant enforcement
+│   │   └── refresh-token.model.js # Justified domain model for refresh_tokens collection
 │   └── users/               # Users module (Flat layout)
 │       ├── user.model.js
 │       ├── user.repository.js
 │       ├── user.routes.js
 │       └── user.schema.js
 ├── services/
-│   ├── email.service.js     # Nodemailer SMTP email verification dispatch
-│   ├── password.service.js  # Argon2id password hashing & policy verification
-│   └── sms.service.js       # SMS verification transport & provider adapter
+│   ├── email.service.js     # Nodemailer SMTP email verification dispatch (shared infrastructure)
+│   ├── password.service.js  # Argon2id password hashing & policy verification (shared infrastructure)
+│   └── sms.service.js       # SMS verification transport & provider adapter (shared infrastructure)
 └── shared/
     ├── constants/           # User roles, account statuses, password policies, API versions
     ├── utils/               # catchAsync & common utilities
     └── validators/          # Reusable Zod schemas, request/response validation & formatters
 ```
+
+> [!NOTE]
+> **Domain Model Justification**: `refresh-token.model.js` is an authoritative Mongoose domain model residing inside `server/src/modules/auth/` because refresh token persistence, token family tracking, and device fingerprint bindings belong exclusively to the authentication domain.
+>
+> **Exclusion of Nonexistent Files**: Nonexistent files such as `auth.validation.js`, `auth.otp.service.js`, `auth.email.service.js`, and `auth.password.service.js` are not present. Reusable infrastructure services remain outside auth under `server/src/services/`.
+
+### 1.2 Frontend Canonical Architecture (React 18 + Vite SPA)
+
+```text
+client/src/
+├── app/                     # App shell, routing provider, and top-level layout wrappers
+├── components/              # Shared component library
+│   └── auth/                # Auth-specific UI components (AuthLayout, OTPInput)
+├── pages/
+│   └── auth/                # 9 Dedicated Authentication Pages
+│       ├── ChangePassword.jsx      # Authenticated user password update flow
+│       ├── ForgotPassword.jsx      # Password recovery email OTP request
+│       ├── Login.jsx               # Credential authentication with rate limit UI
+│       ├── Register.jsx            # Account creation with validation feedback
+│       ├── ResetPassword.jsx       # Reset OTP verification and new password submission
+│       ├── Sessions.jsx            # Active concurrent sessions management UI
+│       ├── VerificationStatus.jsx  # Multi-step onboarding completion confirmation
+│       ├── VerifyEmail.jsx         # Registration Email OTP verification
+│       └── VerifyPhone.jsx         # Registration Phone OTP verification
+├── routes/                  # Route definitions and security guards (ProtectedRoute, PublicOnlyRoute)
+├── services/
+│   └── auth.api.js          # Authoritative Authentication API client methods
+├── store/
+│   └── auth.store.js        # Zustand in-memory state store (zero Web Storage for tokens)
+├── styles/                  # Tailwind CSS and global styling directives
+└── utils/
+    └── api.js               # Axios instance with single-flight 401 refresh queue & CSRF injection
+```
+
+### 1.3 Client Storage & State Isolation Policy
+
+1. **Authentication State (`auth.store.js`)**:
+   - Access tokens and user profiles are stored **strictly in memory** via Zustand.
+   - Access tokens and credentials are **NEVER** persisted to `localStorage`, `sessionStorage`, `IndexedDB`, or JavaScript-accessible cookies.
+   - Volatile memory ensures instantaneous credential clearance upon browser tab closure.
+2. **Refresh Token Cookie**:
+   - Delivered strictly via an `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth` cookie (with `Secure` flag in production).
+   - Inaccessible to client JavaScript, mitigating Cross-Site Scripting (XSS) token harvesting.
+3. **Onboarding Navigation State (`sessionStorage`)**:
+   - Uses key `sabms_onboarding_user`.
+   - **Purpose**: Preserves non-sensitive context (`{ id, name, email, phone, department, role, status, isEmailVerified, isPhoneVerified }`) across the multi-step registration wizard.
+   - **Security**: Contains no credentials, password hashes, or session tokens. Cleared immediately upon onboarding completion in `VerificationStatus.jsx`.
+4. **Theme Preference (`localStorage`)**:
+   - Uses key `sabms_theme` storing exclusively non-sensitive preference string (`'dark'` or `'light'`).
 
 ---
 
@@ -70,15 +122,20 @@ graph TD
     Notify --> SMS[SMS Gateway Transport]
 ```
 
-### 2.1 Layer Responsibilities
+### 2.1 Layer Responsibilities & Separation of Concerns
 
-- **Routes (`*.routes.js`)**: Defines HTTP methods, URL paths, and binds validation/guard middlewares. No business logic or database queries.
-- **Controllers (`*.controller.js`)**: Parses HTTP requests, extracts parameters/cookies/headers, invokes services, and sends standardized JSON responses using `res.success()`, `res.created()`, etc.
-- **Services (`*.service.js`)**: Implements pure business logic, transactional orchestration, Redis state manipulation, and notification dispatch. Does not access Express `req`/`res`.
-- **Repositories (`*.repository.js`)**: Encapsulates database queries (Mongoose models), data access methods, and transaction boundaries.
-- **Models (`*.model.js`)**: Mongoose schema definitions, field types, indexes, and document transformations.
-- **Schemas (`*.schema.js`)**: Strict Zod validation schemas for request bodies, query strings, and route parameters.
-- **Responses (`*.response.js`)**: DTO transformers ensuring zero sensitive field leakage (e.g., stripping `password`, `passwordHash`, `__v`).
+The architecture strictly adheres to a unidirectional dependency hierarchy:
+`routes ↓ controller ↓ service ↓ repository ↓ database / Redis`
+
+- **Routes (`*.routes.js`)**: Defines HTTP methods, paths, and middleware pipelines (validation, rate limiters, anti-caching, guards). Routes must not contain business logic.
+- **Controllers (`*.controller.js`)**: Parses incoming HTTP requests, extracts parameters, headers, and cookies, invokes domain services, manages cookie issuance/clearing, and sends standardized JSON envelopes via `ApiResponse`. Controllers must not directly access MongoDB or Redis.
+- **Services (`*.service.js`)**: Implements pure business rules, cryptographic operations, state transitions, and notification dispatch. Services must not depend on Express `req`/`res` objects.
+- **Repositories (`*.repository.js`)**: Encapsulates persistence operations across MongoDB Mongoose models and atomic Redis commands. Repositories encapsulate persistence.
+- **Models (`*.model.js`)**: Mongoose schema definitions, field validations, indexes, and document lifecycle hooks.
+- **Schemas (`*.schema.js`)**: Strict Zod schemas defining and validating request boundaries (`.strict()`). Schemas own request validation.
+- **Responses (`*.response.js`)**: DTO serialization transformers ensuring sensitive fields (`passwordHash`, `__v`, internal tokens) are stripped. Responses sanitize sensitive domain data.
+- **Constants (`*.constants.js`)**: Constants own security policies, token configurations, rate limits, and system invariants.
+- **Helpers (`*.helper.js`)**: Helpers contain pure reusable authentication and cryptographic utilities (HMAC hashing, JWT token generation/verification, device fingerprinting).
 
 ---
 

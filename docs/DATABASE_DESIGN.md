@@ -28,32 +28,61 @@ SABMS implements a hybrid persistence model:
 
 ## 2. Redis Ephemeral Key Architecture & TTL Strategy
 
-| Redis Key Pattern      | Purpose                                         | Data Type        | TTL                    |
-| :--------------------- | :---------------------------------------------- | :--------------- | :--------------------- |
-| `otp:email:<email>`    | Email verification OTP hash & attempt counter   | Hash / String    | 5 Minutes (`300s`)     |
-| `otp:phone:<phone>`    | Phone verification OTP hash & attempt counter   | Hash / String    | 5 Minutes (`300s`)     |
-| `otp:resend:<id>`      | Resend cooldown timer & rate limiter            | String / Integer | 1 Hour (`3600s`)       |
-| `session:<sessionId>`  | Active session metadata & rotation state        | Hash             | 7 Days (`604800s`)     |
-| `rt:family:<familyId>` | Refresh token family status & active token hash | Hash             | 7 Days (`604800s`)     |
-| `lockout:<email>`      | Account lockout counter & lock flag             | Integer          | 15–30 Minutes          |
-| `rl:auth:ip:<ip>`      | Authentication endpoint IP rate limiter counter | Integer          | 15 Minutes (`900s`)    |
-| `bl:jti:<jti>`         | Revoked JWT access token identifier blocklist   | String           | Remaining JWT Lifetime |
+| Redis Key Pattern                 | Purpose                                       | Data Type     | TTL                 | Policy / Invariants                            |
+| :-------------------------------- | :-------------------------------------------- | :------------ | :------------------ | :--------------------------------------------- |
+| `auth:otp:email:<email>`          | Email verification OTP HMAC hash              | String (JSON) | 10 Minutes (`600s`) | CSPRNG 6-digit; plaintext never logged/stored  |
+| `auth:otp:email:attempts:<email>` | Email OTP failed attempts counter             | Integer       | Matches parent OTP  | Atomic Redis `INCR`; invalidated at 5 attempts |
+| `auth:otp:cooldown:<email>`       | Email OTP resend cooldown timer               | Integer       | 60 Seconds (`60s`)  | Prevents rapid consecutive resends             |
+| `auth:otp:resend:<email>`         | Email OTP resend frequency counter            | Integer       | 1 Hour (`3600s`)    | Capped at 5 resends per hour                   |
+| `auth:otp:phone:<phone>`          | Phone verification OTP HMAC hash              | String (JSON) | 10 Minutes (`600s`) | Isolated Redis key; E.164 formatted target     |
+| `auth:otp:phone:attempts:<phone>` | Phone OTP failed attempts counter             | Integer       | Matches parent OTP  | Atomic Redis `INCR`; invalidated at 5 attempts |
+| `auth:otp:phone:cooldown:<phone>` | Phone OTP resend cooldown timer               | Integer       | 60 Seconds (`60s`)  | Prevents SMS bombing                           |
+| `auth:otp:phone:resend:<phone>`   | Phone OTP resend frequency counter            | Integer       | 1 Hour (`3600s`)    | Capped at 5 resends per hour                   |
+| `auth:otp:reset:<email>`          | Password reset OTP HMAC hash                  | String (JSON) | 5 Minutes (`300s`)  | Zero-enumeration recovery; deleted upon reset  |
+| `auth:otp:reset:attempts:<email>` | Password reset OTP failed attempts counter    | Integer       | Matches parent OTP  | Atomic Redis `INCR`; invalidated at 5 attempts |
+| `auth:otp:reset:cooldown:<email>` | Password reset resend cooldown timer          | Integer       | 60 Seconds (`60s`)  | Enforced for both valid and invalid emails     |
+| `auth:otp:reset:rate:<email>`     | Password reset hourly request limit           | Integer       | 1 Hour (`3600s`)    | Max 3 requests per hour                        |
+| `auth:session:<familyId>`         | Active session snapshot & device cache        | Hash / JSON   | 7 Days (`604800s`)  | Tied to refresh token family lifecycle         |
+| `lockout:<email>`                 | Account lockout attempt counter & flag        | Integer       | 15 Minutes (`900s`) | 5 consecutive failed logins = 15m lockout      |
+| `rl:reg:<ip>`                     | Public registration IP rate limiter           | Integer       | 1 Hour (`3600s`)    | Max 10 registration attempts per hour per IP   |
+| `rl:auth:ip:<ip>`                 | Global authentication IP rate limiter         | Integer       | 15 Minutes (`900s`) | Max 100 requests per 15 minutes per IP         |
+| `bl:jti:<jti>`                    | Revoked JWT access token identifier blocklist | String        | Remaining JWT TTL   | Ephemeral blocklist for immediate token revoke |
+
+### 2.1 Atomic OTP Counter Mechanism
+
+To prevent Time-of-Check to Time-of-Use (TOCTOU) race conditions during concurrent OTP submissions, attempt tracking is decoupled from the stored hash payload and executed via atomic Redis operations:
+
+1. **Atomic Increment**: Failed attempts invoke `redis.incr(attemptsKey)` in `auth.repository.js`. Redis guarantees single-threaded atomic increments without read-modify-write race conditions.
+2. **TTL Synchronization**: On the first failed attempt (`attempts === 1`), the system retrieves the remaining TTL of the parent OTP key (`redis.ttl(key)`) and synchronizes the attempt counter's expiration via `redis.expire(attemptsKey, ttl)`.
+3. **Threshold Enforcement & Clean Eviction**: If `attempts >= 5`, the active OTP record and attempts key are atomically deleted (`redis.del(key, attemptsKey)`), immediately invalidating the code.
+4. **Successful Verification**: Upon valid match, both keys are cleared immediately to guarantee single-use validity.
 
 ---
 
 ## 3. MongoDB Collection Indexing Strategy
 
-| Collection      | Target Fields                                   | Index Type     | Business Justification                                                |
-| :-------------- | :---------------------------------------------- | :------------- | :-------------------------------------------------------------------- |
-| `users`         | `email`                                         | Unique         | Fast authentication lookup & identity integrity.                      |
-| `users`         | `phone`                                         | Sparse Unique  | Unique phone lookup when provided.                                    |
-| `users`         | `{ role: 1, status: 1 }`                        | Compound Index | High-frequency administrative user filtering.                         |
-| `bookings`      | `{ auditoriumId: 1, startTime: 1, endTime: 1 }` | Compound Index | Prevents time-slot overlapping and accelerates availability searches. |
-| `bookings`      | `status`                                        | Single Field   | Optimizes dashboard filtering (`PENDING`, `APPROVED`, `REJECTED`).    |
-| `bookings`      | `userId`                                        | Single Field   | Accelerates "My Bookings" query performance.                          |
-| `events`        | `{ isPublic: 1, date: 1 }`                      | Compound Index | Fast queries for upcoming public events calendar.                     |
-| `notifications` | `{ recipientId: 1, isRead: 1, createdAt: -1 }`  | Compound Index | Real-time notification inbox query performance.                       |
-| `audit_logs`    | `{ entityId: 1, timestamp: -1 }`                | Compound Index | Historical compliance and security audit trails.                      |
+| Collection       | Target Fields                                   | Index Type     | Business Justification                                                |
+| :--------------- | :---------------------------------------------- | :------------- | :-------------------------------------------------------------------- |
+| `users`          | `email`                                         | Unique         | Fast authentication lookup & identity integrity.                      |
+| `users`          | `phone`                                         | Sparse Unique  | Unique phone lookup when provided; permits multiple nulls.            |
+| `users`          | `{ role: 1, status: 1 }`                        | Compound Index | High-frequency administrative user filtering.                         |
+| `refresh_tokens` | `jti`                                           | Unique         | Primary cryptographic token lookup; prevents token collisions.        |
+| `refresh_tokens` | `familyId`                                      | Single Field   | Rapid token family revocation during logout or reuse detection.       |
+| `refresh_tokens` | `userId`                                        | Single Field   | Rapid multi-device session listing and user-wide revocation.          |
+| `refresh_tokens` | `status`                                        | Single Field   | Filtering active vs consumed/revoked tokens.                          |
+| `refresh_tokens` | `{ familyId: 1, status: 1 }`                    | Compound Index | Optimized atomic token consumption and rotation queries.              |
+| `refresh_tokens` | `{ userId: 1, status: 1 }`                      | Compound Index | Accelerated active session management queries.                        |
+| `refresh_tokens` | `{ userId: 1, status: 1, expiresAt: 1 }`        | Compound Index | Efficient query evaluation for valid non-expired user sessions.       |
+| `refresh_tokens` | `expiresAt`                                     | Single Field   | Automated cleanup and TTL expiration evaluation.                      |
+| `refresh_tokens` | `deviceHash`                                    | Single Field   | Device fingerprint validation during token refresh.                   |
+| `bookings`       | `{ auditoriumId: 1, startTime: 1, endTime: 1 }` | Compound Index | Prevents time-slot overlapping and accelerates availability searches. |
+| `bookings`       | `status`                                        | Single Field   | Optimizes dashboard filtering (`PENDING`, `APPROVED`, `REJECTED`).    |
+| `bookings`       | `userId`                                        | Single Field   | Accelerates "My Bookings" query performance.                          |
+| `events`         | `{ isPublic: 1, date: 1 }`                      | Compound Index | Fast queries for upcoming public events calendar.                     |
+| `notifications`  | `{ recipientId: 1, isRead: 1, createdAt: -1 }`  | Compound Index | Real-time notification inbox query performance.                       |
+| `audit_logs`     | `{ entityId: 1, timestamp: -1 }`                | Compound Index | Historical compliance and security audit trails.                      |
+
+---
 
 ---
 
@@ -127,7 +156,95 @@ SABMS implements a hybrid persistence model:
 }
 ```
 
-### 4.2 `auditoriums` Collection Schema
+### 4.2 `refresh_tokens` Collection Schema (`refresh-token.model.js`)
+
+The `refresh_tokens` collection stores persistent session tokens, cryptographic rotation lineage, and device fingerprints for token family revocation:
+
+```javascript
+{
+  _id: ObjectId,
+  jti: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    index: true
+  },
+  familyId: {
+    type: String,
+    required: true,
+    trim: true,
+    index: true
+  },
+  userId: {
+    type: ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'CONSUMED', 'REVOKED', 'REUSED'],
+    default: 'ACTIVE',
+    required: true,
+    index: true
+  },
+  issuedAt: {
+    type: Date,
+    default: Date.now,
+    required: true
+  },
+  expiresAt: {
+    type: Date,
+    required: true,
+    index: true
+  },
+  consumedAt: {
+    type: Date,
+    default: null
+  },
+  revokedAt: {
+    type: Date,
+    default: null
+  },
+  revokedReason: {
+    type: String,
+    default: null
+  },
+  replacedByTokenId: {
+    type: String,
+    default: null
+  },
+  reuseDetectedAt: {
+    type: Date,
+    default: null
+  },
+  ipAddress: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  userAgent: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  deviceHash: {
+    type: String,
+    default: null,
+    trim: true,
+    index: true
+  },
+  lastActivityAt: {
+    type: Date,
+    default: Date.now
+  },
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### 4.3 `auditoriums` Collection Schema
 
 ```javascript
 {
@@ -151,7 +268,7 @@ SABMS implements a hybrid persistence model:
 }
 ```
 
-### 4.3 `equipment` Collection Schema
+### 4.4 `equipment` Collection Schema
 
 ```javascript
 {
@@ -173,7 +290,7 @@ SABMS implements a hybrid persistence model:
 }
 ```
 
-### 4.4 `bookings` Collection Schema
+### 4.5 `bookings` Collection Schema
 
 ```javascript
 {
@@ -199,7 +316,7 @@ SABMS implements a hybrid persistence model:
 }
 ```
 
-### 4.5 `events` Collection Schema
+### 4.6 `events` Collection Schema
 
 ```javascript
 {
@@ -217,7 +334,7 @@ SABMS implements a hybrid persistence model:
 }
 ```
 
-### 4.6 `notifications` & `audit_logs` Collections
+### 4.7 `notifications` & `audit_logs` Collections
 
 ```javascript
 // notifications

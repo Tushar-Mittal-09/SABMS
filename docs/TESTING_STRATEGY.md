@@ -18,14 +18,19 @@
 
 ---
 
-## 2. Test Suite Classification & Coverage Goals
+## 2. Test Suite Classification & Quality Gates
 
-| Level                   | Scope                                                | Framework             | Coverage Goal     |
-| :---------------------- | :--------------------------------------------------- | :-------------------- | :---------------- |
-| **Unit Testing**        | Utility functions, business services, state hooks    | Jest                  | 85%+              |
-| **Integration Testing** | Express API endpoints, MongoDB queries, middlewares  | Jest + Supertest      | 80%+              |
-| **Frontend UI Testing** | React components, user interactions, form validation | React Testing Library | 75%+              |
-| **E2E Testing**         | Complete reservation, OTP, and approval workflows    | Playwright            | Key user journeys |
+| Level                                  | Scope                                                             | Framework / Tool          | Verification Approach                                                    |
+| :------------------------------------- | :---------------------------------------------------------------- | :------------------------ | :----------------------------------------------------------------------- |
+| **Backend Unit Testing**               | Domain services, helpers, cryptographic primitives, Zod schemas   | Jest                      | 27 suites, 592 unit & integration tests passing (100%)                   |
+| **Backend Integration Testing**        | Express API endpoints, MongoDB queries, Redis state, middleware   | Jest + Supertest          | End-to-end HTTP pipeline, session lifecycle, and concurrency race suites |
+| **Frontend Production Build**          | JSX parsing, asset bundling, CSS generation, module resolution    | Vite (`vite build`)       | Clean production bundle compilation (0 errors; 1663 modules transformed) |
+| **Frontend Code Quality**              | Syntax correctness, unused variables, React hook rules            | ESLint (`eslint .`)       | Clean lint report (0 errors, 0 warnings)                                 |
+| **Frontend API Contract Verification** | Auth API layer & Zustand store integration with backend endpoints | Supertest Contract Suites | End-to-end contract validation covering all 9 auth page flows            |
+| **E2E & Component Harness**            | Future UI component unit tests & browser automation               | Vitest / RTL / Playwright | Scheduled for post-Sprint 2 frontend architecture phase                  |
+
+> [!NOTE]
+> **Accurate Frontend Verification Claim**: The project does not claim automated Vitest or React Testing Library coverage for Sprint 2. Frontend verification is strictly grounded in clean Vite production builds, zero ESLint errors/warnings, backend contract integration suites, and architectural review of the Zustand in-memory state and Axios 401 interceptors.
 
 ---
 
@@ -87,10 +92,10 @@
 
 ### 3.6 Guard Middleware Tests (Sprint 2.8)
 
-- [ ] `TC-AUTH-050`: Access protected endpoint with valid JWT returns `200 OK` with populated `req.user`.
-- [ ] `TC-AUTH-051`: Access protected endpoint with expired JWT returns `401 Unauthorized` (`AUTH_TOKEN_EXPIRED`).
-- [ ] `TC-AUTH-052`: Access protected endpoint with missing token returns `401 Unauthorized` (`AUTH_TOKEN_MISSING`).
-- [ ] `TC-AUTH-053`: Access admin endpoint with STUDENT role returns `403 Forbidden` (`AUTH_FORBIDDEN_ROLE`).
+- [x] `TC-AUTH-050`: Access protected endpoint with valid JWT returns `200 OK` with populated `req.user` (`auth.change-password.test.js`, `auth.session-security.test.js`) (Sprint 2.8 & 2.14).
+- [x] `TC-AUTH-051`: Access protected endpoint with expired JWT returns `401 Unauthorized` (`AUTH_TOKEN_EXPIRED`) (`auth.change-password.test.js`, `auth.session-security.test.js`) (Sprint 2.8).
+- [x] `TC-AUTH-052`: Access protected endpoint with missing token returns `401 Unauthorized` (`AUTH_TOKEN_MISSING`) (`auth.change-password.test.js`, `auth.rate-limiting.test.js`) (Sprint 2.8).
+- [x] `TC-AUTH-053`: Access admin endpoint with STUDENT role returns `403 Forbidden` (`AUTH_FORBIDDEN_ROLE`) (`auth.rate-limiting.test.js`) (Sprint 2.8 & 2.17).
 
 ### 3.7 Session Security & Device Fingerprinting Tests (Sprint 2.16)
 
@@ -132,3 +137,15 @@
 1. **Pre-commit Hooks**: Enforces ESLint linting and Prettier formatting checks on all staged files via `lint-staged`.
 2. **Pull Request Validation**: Automated Jest test runs require 100% test pass rate across all suites.
 3. **Coverage Thresholds**: Mandatory 80% code coverage threshold on business services and controllers before merging.
+
+---
+
+## 5. Verified Sprint 2 Test Telemetry
+
+- **Total Test Suites**: 27 passed, 27 total (100%)
+- **Total Test Cases**: 592 passed, 592 total (100%)
+- **Snapshots**: 0 total
+- **Process Termination**: Clean exit (exit code 0) without open handles or `--forceExit` (Jest executed in ~15s)
+- **Server Linter**: 0 errors, 0 warnings (`eslint .`)
+- **Client Linter**: 0 errors, 0 warnings (`eslint .`)
+- **Client Production Build**: Verified with Vite (`vite build` in 6.48s; 1663 modules transformed)

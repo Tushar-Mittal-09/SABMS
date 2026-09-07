@@ -42,36 +42,44 @@ graph TD
 ## 2. Core Architectural Principles
 
 1. **Modular Monolith Placement**: All domain logic is grouped into self-contained feature modules under `server/src/modules/` without distributed microservice overhead.
-2. **Layered Separation of Concerns**: Strict boundary rules ensure `Route → Validation → Controller → Service → Repository → Data Store`.
+2. **Layered Separation of Concerns**: Strict boundary rules ensure `routes → controller → service → repository → database / Redis`:
+   - **Routes (`*.routes.js`)**: Map HTTP verbs and endpoints; mount validation, rate-limiting, and guard middlewares. Must never contain business logic.
+   - **Controllers (`*.controller.js`)**: Extract parameters, manage cookies, invoke services, and return standardized JSON envelopes. Must never directly query MongoDB or Redis.
+   - **Services (`*.service.js`)**: Own domain logic, transaction orchestration, and security invariants. Must never depend on Express `req`/`res` objects.
+   - **Repositories (`*.repository.js`)**: Encapsulate persistence queries and cache operations.
+   - **Schemas (`*.schema.js`)**: Own strict request contract validation.
+   - **Responses (`*.response.js`)**: Sanitize domain entities to prevent leaking sensitive fields (`passwordHash`, `__v`).
+   - **Constants (`*.constants.js`)**: Define security policies, token lifespans, and configuration limits.
+   - **Helpers (`*.helper.js`)**: Pure reusable cryptographic and utility helpers.
 3. **Stateless API with Dual-Token Security**:
-   - **Access Token**: Short-lived JSON Web Token (`JWT`, ~15 min lifetime) transmitted via `Authorization: Bearer <token>`.
+   - **Access Token**: Short-lived JSON Web Token (`JWT`, ~15 min lifetime) transmitted via `Authorization: Bearer <token>`, maintained strictly in client volatile memory via Zustand.
    - **Refresh Token**: Long-lived cryptographically signed JSON Web Token (`JWT`, ~7 days lifetime) stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies (`Path=/api/v1/auth`) with single-use rotation and reuse theft detection.
 4. **State Storage Partitioning**:
-   - **MongoDB (Persistent)**: Long-term storage of user accounts, roles, venue metadata, bookings, and audit records.
-   - **Redis (Ephemeral)**: OTP verification hashes (10 min registration / 5 min reset TTL), refresh token rotation families & session state (7 day TTL), failed login lockout counters, and JTI revocation blocklists.
+   - **MongoDB (Persistent)**: Long-term storage of user accounts, roles, venue metadata, bookings, and audit records. Persistent refresh token families and session lineage reside in the `refresh_tokens` collection (`refresh-token.model.js`), justified as an authoritative auth domain entity.
+   - **Redis (Ephemeral)**: OTP verification hashes (10 min registration / 5 min reset TTL), atomic OTP attempt counters (`auth:otp:<type>:attempts:<target>`), cooldowns (60s), refresh token rotation families & session state (7 day TTL), failed login lockout counters (15m), and JTI revocation blocklists.
 5. **Zero-Trust Security Boundary**: Sensitive secrets, plaintext passwords, OTPs, and refresh tokens are never logged, never exposed to client JavaScript, and sanitized across all response and error pipelines.
 
 ---
 
 ## 3. System Context & Bounded Contexts
 
-| Bounded Context     | Domain Boundary                                                             | Database Ownership                                         |
-| :------------------ | :-------------------------------------------------------------------------- | :--------------------------------------------------------- |
-| **`auth`**          | Identity provisioning, credential verification, OTP, JWT, session lifecycle | User, Role, Session collections; Redis OTP & Session store |
-| **`users`**         | User profiles, account management, department associations                  | User collection                                            |
-| **`auditoriums`**   | Venues, seating layouts, AV & physical equipment                            | Auditorium, Equipment collections                          |
-| **`bookings`**      | Time-slot reservations, approval workflows, conflict detection              | Booking, SlotLock collections                              |
-| **`events`**        | Public event listings, ticketing, schedules                                 | Event, Ticket collections                                  |
-| **`notifications`** | Email delivery, SMS OTPs, WebSocket alerts, audit logging                   | Notification, AuditLog collections                         |
+| Bounded Context     | Domain Boundary                                                             | Database Ownership                                                                                                  |
+| :------------------ | :-------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------ |
+| **`auth`**          | Identity provisioning, credential verification, OTP, JWT, session lifecycle | `User` (credentials), `RefreshToken` (`refresh-token.model.js` domain model) collections; Redis OTP & Session store |
+| **`users`**         | User profiles, account management, department associations                  | User collection                                                                                                     |
+| **`auditoriums`**   | Venues, seating layouts, AV & physical equipment                            | Auditorium, Equipment collections                                                                                   |
+| **`bookings`**      | Time-slot reservations, approval workflows, conflict detection              | Booking, SlotLock collections                                                                                       |
+| **`events`**        | Public event listings, ticketing, schedules                                 | Event, Ticket collections                                                                                           |
+| **`notifications`** | Email delivery, SMS OTPs, WebSocket alerts, audit logging                   | Notification, AuditLog collections                                                                                  |
 
 ---
 
 ## 4. Technology Stack Rationale
 
-- **Frontend**: React 18 + Vite (Fast HMR & lightweight bundling), Tailwind CSS (Consistent design system tokens), Zustand (Client state), TanStack Query (Server state synchronization).
+- **Frontend**: React 18 + Vite (Fast HMR & lightweight bundling), Tailwind CSS (Consistent design system tokens), Zustand (Client state strictly in memory; zero tokens in Web Storage), TanStack Query (Server state synchronization).
 - **Backend**: Node.js + Express.js 5 (High throughput I/O), Mongoose + MongoDB (Flexible document model for dynamic venue seating layouts).
-- **Caching & Ephemeral Store**: Redis 7+ (`ioredis`) for high-speed TTL management, rate-limiting, and distributed locks.
-- **Security & Cryptography**: Argon2id for password hashing, CSPRNG for OTP/token generation, Helmet for HTTP security headers.
+- **Caching & Ephemeral Store**: Redis 7+ (`ioredis`) for high-speed TTL management, atomic rate-limiting/attempt counters via Redis `INCR`, and distributed locks.
+- **Security & Cryptography**: Argon2id for password hashing, CSPRNG for OTP/token generation, Helmet for HTTP security headers, double-submit CSRF with HMAC signatures.
 - **Real-Time Communication**: Socket.IO for instant booking lock notifications and live calendar updates.
 
 ---
@@ -82,3 +90,12 @@ graph TD
 - **Security**: Defense-in-depth with Helmet headers, NoSQL injection sanitization, Argon2id hashing, rate limiting, and CORS origin whitelisting.
 - **Scalability**: Stateless application tier allowing horizontal scaling behind load balancers with centralized MongoDB cluster and Redis cache.
 - **Auditability**: Request correlation tracking via `X-Request-ID` across all Winston structured logs and API responses.
+
+---
+
+## 6. Document Revision & Acceptance History
+
+| Version  | Date       | Author                    | Description                                                                 |
+| :------- | :--------- | :------------------------ | :-------------------------------------------------------------------------- |
+| `v1.0.0` | 2026-08-08 | Senior Software Architect | Initial HLD Architecture Baseline                                           |
+| `v1.1.0` | 2026-09-07 | Senior Software Architect | Sprint 2 Final Acceptance Closure: Canonical Layer Separation & Auth Domain |

@@ -11,7 +11,7 @@ erDiagram
     USER ||--o{ BOOKING : creates
     USER ||--o{ NOTIFICATION : receives
     USER ||--o{ AUDIT_LOG : generates
-    USER ||--o{ SESSION : owns
+    USER ||--o{ REFRESH_TOKEN : owns
     AUDITORIUM ||--o{ BOOKING : reserved_for
     AUDITORIUM ||--o{ EQUIPMENT : contains
     BOOKING ||--o| EVENT : hosts
@@ -34,14 +34,25 @@ erDiagram
         date updatedAt
     }
 
-    SESSION {
-        string sessionId PK
+    REFRESH_TOKEN {
+        string _id PK
+        string jti UK
+        string familyId
         string userId FK
-        string refreshTokenHash
+        string status
+        date issuedAt
+        date expiresAt
+        date consumedAt
+        date revokedAt
+        string revokedReason
+        string replacedByTokenId
+        date reuseDetectedAt
         string ipAddress
         string userAgent
+        string deviceHash
         date lastActivityAt
-        date expiresAt
+        date createdAt
+        date updatedAt
     }
 
     AUDITORIUM {
@@ -125,7 +136,7 @@ erDiagram
 ## 2. Entity Cardinalities & Relational Rules
 
 1. **User ↔ Booking (`1 : N`)**: A user can initiate multiple booking requests across different dates and times.
-2. **User ↔ Session (`1 : N`)**: A user can maintain multiple concurrent active device sessions tracked in Redis and indexed for session management.
+2. **User ↔ Refresh Token / Session (`1 : N`)**: A user can maintain multiple concurrent active device sessions represented as persistent `RefreshToken` documents in MongoDB (`refresh_tokens` collection) and cached in Redis for fast session lookup and device verification.
 3. **Auditorium ↔ Booking (`1 : N`)**: An auditorium venue can host multiple sequential bookings, strictly constrained to non-overlapping time slots.
 4. **Auditorium ↔ Equipment (`1 : N`)**: An auditorium owns multiple assigned AV, lighting, and physical equipment items.
 5. **Booking ↔ Event (`1 : 1`)**: An approved booking may optionally host exactly one public event listing.

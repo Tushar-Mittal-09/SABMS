@@ -95,6 +95,121 @@ export const authApi = {
   },
 
   /**
+   * Authenticates user with credentials (Sprint 2.7).
+   * POST /api/v1/auth/login
+   *
+   * @param {Object} credentials
+   * @param {string} credentials.email
+   * @param {string} credentials.password
+   * @returns {Promise<{ success: boolean, message: string, data: { user: Object, accessToken: string } }>}
+   */
+  login: async ({ email, password }) => {
+    return apiClient.post('/auth/login', {
+      email: email.trim().toLowerCase(),
+      password,
+    });
+  },
+
+  /**
+   * Exchanges HttpOnly refresh cookie for a new access token (Sprint 2.9/2.10).
+   * POST /api/v1/auth/refresh
+   *
+   * @returns {Promise<{ success: boolean, message: string, data: { accessToken: string, user: Object } }>}
+   */
+  refresh: async () => {
+    return apiClient.post('/auth/refresh');
+  },
+
+  /**
+   * Requests a password reset OTP via email (Sprint 2.12).
+   * POST /api/v1/auth/forgot-password
+   *
+   * @param {Object} payload
+   * @param {string} payload.email
+   * @returns {Promise<{ success: boolean, message: string }>}
+   */
+  forgotPassword: async ({ email }) => {
+    return apiClient.post('/auth/forgot-password', {
+      email: email.trim().toLowerCase(),
+    });
+  },
+
+  /**
+   * Verifies reset OTP and sets new password (Sprint 2.13).
+   * POST /api/v1/auth/reset-password
+   *
+   * @param {Object} payload
+   * @param {string} payload.email
+   * @param {string} payload.otp
+   * @param {string} payload.newPassword
+   * @returns {Promise<{ success: boolean, message: string }>}
+   */
+  resetPassword: async ({ email, otp, newPassword }) => {
+    return apiClient.post('/auth/reset-password', {
+      email: email.trim().toLowerCase(),
+      otp: otp.trim(),
+      newPassword,
+    });
+  },
+
+  /**
+   * Authenticated user password change (Sprint 2.14).
+   * POST /api/v1/auth/change-password
+   *
+   * @param {Object} payload
+   * @param {string} payload.currentPassword
+   * @param {string} payload.newPassword
+   * @returns {Promise<{ success: boolean, message: string }>}
+   */
+  changePassword: async ({ currentPassword, newPassword }) => {
+    return apiClient.post('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+  },
+
+  /**
+   * Retrieves all active sessions for authenticated user (Sprint 2.16).
+   * GET /api/v1/auth/sessions
+   *
+   * @returns {Promise<{ success: boolean, message: string, data: Array<Object> }>}
+   */
+  getSessions: async () => {
+    return apiClient.get('/auth/sessions');
+  },
+
+  /**
+   * Revokes a specific session by sessionId (Sprint 2.16).
+   * DELETE /api/v1/auth/sessions/:sessionId
+   *
+   * @param {string} sessionId
+   * @returns {Promise<{ success: boolean, message: string }>}
+   */
+  revokeSession: async (sessionId) => {
+    return apiClient.delete(`/auth/sessions/${sessionId}`);
+  },
+
+  /**
+   * Revokes all other sessions except current active session (Sprint 2.16).
+   * DELETE /api/v1/auth/sessions
+   *
+   * @returns {Promise<{ success: boolean, message: string }>}
+   */
+  revokeAllOtherSessions: async () => {
+    return apiClient.delete('/auth/sessions');
+  },
+
+  /**
+   * Retrieves CSRF token and establishes double-submit cookie (Sprint 2.18).
+   * GET /api/v1/auth/csrf-token
+   *
+   * @returns {Promise<{ success: boolean, data: { csrfToken: string } }>}
+   */
+  getCsrfToken: async () => {
+    return apiClient.get('/auth/csrf-token');
+  },
+
+  /**
    * Logs out the user and invalidates refresh token family (Sprint 2.11).
    * POST /api/v1/auth/logout
    *

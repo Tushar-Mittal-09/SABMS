@@ -745,7 +745,15 @@ describe('Sprint 2.12 — Forgot Password Workflow', () => {
 
     it('30. should get and parse reset OTP from Redis', async () => {
       const otpData = { otpHash: 'hash123', attempts: 0 };
-      mockRedis.get.mockResolvedValue(JSON.stringify(otpData));
+      mockRedis.get.mockImplementation((key) => {
+        if (key === 'auth:otp:reset:jane.doe@university.edu') {
+          return Promise.resolve(JSON.stringify(otpData));
+        }
+        if (key === 'auth:otp:reset:attempts:jane.doe@university.edu') {
+          return Promise.resolve('0');
+        }
+        return Promise.resolve(null);
+      });
 
       const res = await repo.getPasswordResetOtp('jane.doe@university.edu');
       expect(res).toEqual(otpData);
@@ -769,7 +777,8 @@ describe('Sprint 2.12 — Forgot Password Workflow', () => {
     it('32. should delete reset OTP from Redis', async () => {
       await repo.deletePasswordResetOtp('jane.doe@university.edu');
       expect(mockRedis.del).toHaveBeenCalledWith(
-        'auth:otp:reset:jane.doe@university.edu'
+        'auth:otp:reset:jane.doe@university.edu',
+        'auth:otp:reset:attempts:jane.doe@university.edu'
       );
     });
 

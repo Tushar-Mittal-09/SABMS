@@ -82,33 +82,35 @@ if (!config.isProduction) {
  * Captures all log levels for general application activity.
  * Rotates daily, max 20MB per file, retains 14 days of history.
  */
-transports.push(
-  new winston.transports.DailyRotateFile({
-    filename: path.join(LOG_DIR, 'combined-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    maxSize: '20m',
-    maxFiles: '14d',
-    zippedArchive: true,
-    format: prodJsonFormat,
-  })
-);
+if (!config.isTest) {
+  transports.push(
+    new winston.transports.DailyRotateFile({
+      filename: path.join(LOG_DIR, 'combined-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '20m',
+      maxFiles: '14d',
+      zippedArchive: true,
+      format: prodJsonFormat,
+    })
+  );
 
-/**
- * Error Daily Rotate File Transport
- * Captures only error-level logs for critical issue investigation.
- * Rotates daily, max 20MB per file, retains 30 days of history.
- */
-transports.push(
-  new winston.transports.DailyRotateFile({
-    level: 'error',
-    filename: path.join(LOG_DIR, 'error-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    maxSize: '20m',
-    maxFiles: '30d',
-    zippedArchive: true,
-    format: prodJsonFormat,
-  })
-);
+  /**
+   * Error Daily Rotate File Transport
+   * Captures only error-level logs for critical issue investigation.
+   * Rotates daily, max 20MB per file, retains 30 days of history.
+   */
+  transports.push(
+    new winston.transports.DailyRotateFile({
+      level: 'error',
+      filename: path.join(LOG_DIR, 'error-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '20m',
+      maxFiles: '30d',
+      zippedArchive: true,
+      format: prodJsonFormat,
+    })
+  );
+}
 
 // ─── Core Winston Logger Instance ───────────────────────────────────────────
 const logger = winston.createLogger({
@@ -139,20 +141,27 @@ logger.stream = {
  * Isolated from application logs to support independent retention policies.
  * Rotates daily, retains 90 days of history.
  */
-const auditTransport = new winston.transports.DailyRotateFile({
-  filename: path.join(LOG_DIR, 'audit-%DATE%.log'),
-  datePattern: 'YYYY-MM-DD',
-  maxSize: '20m',
-  maxFiles: '90d',
-  zippedArchive: true,
-  format: prodJsonFormat,
-});
+const auditTransports = [];
+if (!config.isTest) {
+  auditTransports.push(
+    new winston.transports.DailyRotateFile({
+      filename: path.join(LOG_DIR, 'audit-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '20m',
+      maxFiles: '90d',
+      zippedArchive: true,
+      format: prodJsonFormat,
+    })
+  );
+} else {
+  auditTransports.push(new winston.transports.Console({ silent: true }));
+}
 
 const auditLogger = winston.createLogger({
   level: 'info',
   levels,
   defaultMeta: { service: `${config.appName}-audit` },
-  transports: [auditTransport],
+  transports: auditTransports,
   exitOnError: false,
 });
 
@@ -170,5 +179,26 @@ logger.audit = (action, details = {}) => {
     timestamp: new Date().toISOString(),
   });
 };
+
+/**
+ * Gracefully closes all Winston transports for clean test teardown.
+ */
+const closeLogger = () => {
+  logger.transports.forEach((t) => {
+    if (typeof t.close === 'function') {
+      t.close();
+    }
+  });
+  logger.close();
+
+  auditLogger.transports.forEach((t) => {
+    if (typeof t.close === 'function') {
+      t.close();
+    }
+  });
+  auditLogger.close();
+};
+
+logger.closeLogger = closeLogger;
 
 module.exports = logger;

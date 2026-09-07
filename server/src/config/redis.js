@@ -19,6 +19,9 @@ const buildRedisOptions = () => {
     enableReadyCheck: true,
     showFriendlyErrorStack: !config.isProduction,
     retryStrategy: (times) => {
+      if (config.isTest) {
+        return null;
+      }
       const delay = Math.min(times * 100, 3000);
       return delay;
     },

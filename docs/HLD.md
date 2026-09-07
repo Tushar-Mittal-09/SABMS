@@ -45,10 +45,10 @@ graph TD
 2. **Layered Separation of Concerns**: Strict boundary rules ensure `Route → Validation → Controller → Service → Repository → Data Store`.
 3. **Stateless API with Dual-Token Security**:
    - **Access Token**: Short-lived JSON Web Token (`JWT`, ~15 min lifetime) transmitted via `Authorization: Bearer <token>`.
-   - **Refresh Token**: Long-lived high-entropy opaque random string (64 bytes, ~7 days lifetime) stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies with single-use rotation and reuse theft detection.
+   - **Refresh Token**: Long-lived cryptographically signed JSON Web Token (`JWT`, ~7 days lifetime) stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies (`Path=/api/v1/auth`) with single-use rotation and reuse theft detection.
 4. **State Storage Partitioning**:
    - **MongoDB (Persistent)**: Long-term storage of user accounts, roles, venue metadata, bookings, and audit records.
-   - **Redis (Ephemeral)**: OTP verification hashes (5 min TTL), refresh token rotation families & session state (7 day TTL), failed login lockout counters, and JTI revocation blocklists.
+   - **Redis (Ephemeral)**: OTP verification hashes (10 min registration / 5 min reset TTL), refresh token rotation families & session state (7 day TTL), failed login lockout counters, and JTI revocation blocklists.
 5. **Zero-Trust Security Boundary**: Sensitive secrets, plaintext passwords, OTPs, and refresh tokens are never logged, never exposed to client JavaScript, and sanitized across all response and error pipelines.
 
 ---

@@ -357,7 +357,7 @@
 - **Description**: Authenticates user credentials (email & password) using Argon2id constant-time verification, validates account state (active & verified), updates `lastLoginAt`, and returns sanitized user profile along with a cryptographically signed short-lived JWT Access Token in the response body, and sets a long-lived cryptographically signed JWT Refresh Token in a secure HttpOnly cookie.
 - **Sprint Boundaries**:
   - **Access Token (JWT)**: Sprint 2.8 `[IMPLEMENTED]` (Short-lived, ~15m, signed with HMAC-SHA256, contains `sub`, `role`, `iat`, `exp`, `iss`, `aud`).
-  - **Refresh Tokens & HttpOnly Cookie**: Sprint 2.9 `[IMPLEMENTED]` (Long-lived, ~7d, signed with dedicated `JWT_REFRESH_SECRET`, contains `sub`, `jti`, `familyId`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`, delivered via `HttpOnly`, `SameSite=Strict`, scoped `Path=/api/v1/auth/refresh`).
+  - **Refresh Tokens & HttpOnly Cookie**: Sprint 2.9 `[IMPLEMENTED]` (Long-lived, ~7d, signed with dedicated `JWT_REFRESH_SECRET`, contains `sub`, `jti`, `familyId`, `type: 'refresh'`, `iat`, `exp`, `iss`, `aud`, delivered via `HttpOnly`, `SameSite=Strict`, scoped `Path=/api/v1/auth`).
   - **Single-Use Token Rotation & Reuse Detection**: Sprint 2.10 `[IMPLEMENTED]` (Initial family `familyId` created on login, initial token persisted as `ACTIVE`, rotated on each refresh with replacement cookie, replayed tokens trigger family revocation and cookie clearing).
   - **Logout & Revocation endpoint**: Sprint 2.11 `[IMPLEMENTED]`.
 - **Access**: Public
@@ -370,7 +370,7 @@
   ```
 - **Response Headers**:
   ```http
-  Set-Cookie: refreshToken=<JWT_REFRESH_TOKEN>; Path=/api/v1/auth/refresh; HttpOnly; SameSite=Strict; Max-Age=604800; Secure
+  Set-Cookie: refreshToken=<JWT_REFRESH_TOKEN>; Path=/api/v1/auth; HttpOnly; SameSite=Strict; Max-Age=604800; Secure
   ```
 - **Success Response (`200 OK`)**:
   ```json
@@ -421,11 +421,11 @@
 - **Request Body**: None (Tokens in request body, query parameters, or Authorization headers are strictly ignored/rejected).
 - **Response Headers (Success - 200 OK)**:
   ```http
-  Set-Cookie: refreshToken=<NEW_ROTATED_JWT_REFRESH_TOKEN>; Path=/api/v1/auth/refresh; HttpOnly; SameSite=Strict; Max-Age=604800; Secure
+  Set-Cookie: refreshToken=<NEW_ROTATED_JWT_REFRESH_TOKEN>; Path=/api/v1/auth; HttpOnly; SameSite=Strict; Max-Age=604800; Secure
   ```
 - **Response Headers (Reuse Detected - 401 Unauthorized)**:
   ```http
-  Set-Cookie: refreshToken=; Path=/api/v1/auth/refresh; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict
+  Set-Cookie: refreshToken=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict
   ```
 - **Success Response (`200 OK`)**:
   ```json
@@ -475,7 +475,7 @@
 - **Request Body**: None (No JSON body required. Tokens in request body, query parameters, or Authorization headers are strictly ignored/rejected).
 - **Response Headers**:
   ```http
-  Set-Cookie: refreshToken=; Path=/api/v1/auth/refresh; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict
+  Set-Cookie: refreshToken=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict
   ```
 - **Success Response (`200 OK`)**:
   ```json
@@ -487,7 +487,7 @@
   }
   ```
 - **Invariants & Security Behaviors**:
-  - **Cookie Cleared**: The `refreshToken` cookie is cleared using matching configuration (`HttpOnly`, `Path=/api/v1/auth/refresh`, `SameSite=Strict`, `Secure`).
+  - **Cookie Cleared**: The `refreshToken` cookie is cleared using matching configuration (`HttpOnly`, `Path=/api/v1/auth`, `SameSite=Strict`, `Secure`).
   - **Family Revoked**: The entire refresh-token family is revoked in MongoDB. Subsequent `/refresh` requests using any token from the family fail with `401 Unauthorized`.
   - **Idempotency**: Requests with missing cookies, expired tokens, or already-revoked tokens succeed safely (`HTTP 200`), clear the browser cookie, and perform no unsafe database mutations.
   - **No Unverified Trust**: The service never trusts unverified JWT claims (`jwt.decode()`) to mutate database records; cryptographic verification must succeed first.

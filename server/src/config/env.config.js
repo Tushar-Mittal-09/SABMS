@@ -87,15 +87,85 @@ const envSchema = z
     // Security Configuration
     COOKIE_SECRET: z
       .string()
+      .min(32, 'COOKIE_SECRET must be at least 32 characters long')
       .default('sabms-enterprise-secure-cookie-secret-key-2026'),
     RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 mins
     RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(100),
     PAYLOAD_SIZE_LIMIT: z.string().default('10mb'),
   })
-  .refine((data) => Boolean(data.JWT_ACCESS_SECRET || data.JWT_SECRET), {
-    message:
-      'JWT_ACCESS_SECRET or JWT_SECRET must be provided and be at least 16 characters long',
-    path: ['JWT_ACCESS_SECRET'],
+  .superRefine((data, ctx) => {
+    if (!data.JWT_ACCESS_SECRET && !data.JWT_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'JWT_ACCESS_SECRET or JWT_SECRET must be provided and be at least 16 characters long',
+        path: ['JWT_ACCESS_SECRET'],
+      });
+    }
+
+    if (data.NODE_ENV === 'production') {
+      const defaultSecrets = [
+        'sabms-enterprise-otp-hmac-secret-2026',
+        'sabms-enterprise-secure-cookie-secret-key-2026',
+        'default-sabms-otp-secret',
+        'sabms-secret-cookie-salt-min-32-chars-long',
+        'sabms-default-jwt-access-secret-32-chars!',
+      ];
+
+      if (!data.COOKIE_SECRET || defaultSecrets.includes(data.COOKIE_SECRET)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'COOKIE_SECRET must be explicitly configured with a secure non-default secret in production',
+          path: ['COOKIE_SECRET'],
+        });
+      }
+
+      if (
+        !data.OTP_HASH_SECRET ||
+        defaultSecrets.includes(data.OTP_HASH_SECRET)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'OTP_HASH_SECRET must be explicitly configured with a secure non-default secret in production',
+          path: ['OTP_HASH_SECRET'],
+        });
+      }
+
+      if (data.JWT_SECRET && defaultSecrets.includes(data.JWT_SECRET)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'JWT_SECRET must not use a default development secret in production',
+          path: ['JWT_SECRET'],
+        });
+      }
+
+      if (
+        data.JWT_ACCESS_SECRET &&
+        defaultSecrets.includes(data.JWT_ACCESS_SECRET)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'JWT_ACCESS_SECRET must not use a default development secret in production',
+          path: ['JWT_ACCESS_SECRET'],
+        });
+      }
+
+      if (
+        data.JWT_REFRESH_SECRET &&
+        defaultSecrets.includes(data.JWT_REFRESH_SECRET)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'JWT_REFRESH_SECRET must not use a default development secret in production',
+          path: ['JWT_REFRESH_SECRET'],
+        });
+      }
+    }
   });
 
 /**
@@ -198,6 +268,7 @@ const config = Object.freeze({
     max: parsedEnv.RATE_LIMIT_MAX_REQUESTS,
   }),
   payloadSizeLimit: parsedEnv.PAYLOAD_SIZE_LIMIT,
+  envSchema,
 });
 
 module.exports = config;

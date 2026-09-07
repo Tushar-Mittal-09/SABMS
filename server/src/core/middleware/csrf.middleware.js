@@ -14,11 +14,11 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * @param {string} [secret] - HMAC secret key (defaults to config.cookieSecret).
  * @returns {string} Signed CSRF token.
  */
-const generateCsrfToken = (secret = config.cookieSecret) => {
-  const hmacSecret =
-    secret ||
-    config.cookieSecret ||
-    'sabms-enterprise-secure-cookie-secret-key-2026';
+const generateCsrfToken = (secret) => {
+  const hmacSecret = secret !== undefined ? secret : config.cookieSecret;
+  if (!hmacSecret) {
+    throw new Error('Cookie secret is required for CSRF token generation');
+  }
   const randomValue = crypto.randomBytes(32).toString('hex');
   const signature = crypto
     .createHmac('sha256', hmacSecret)
@@ -34,7 +34,7 @@ const generateCsrfToken = (secret = config.cookieSecret) => {
  * @param {string} [secret] - HMAC secret key.
  * @returns {boolean} True if token has valid structure and signature.
  */
-const verifyCsrfTokenSignature = (token, secret = config.cookieSecret) => {
+const verifyCsrfTokenSignature = (token, secret) => {
   if (!token || typeof token !== 'string' || !token.includes('.')) {
     return false;
   }
@@ -44,10 +44,10 @@ const verifyCsrfTokenSignature = (token, secret = config.cookieSecret) => {
     return false;
   }
 
-  const hmacSecret =
-    secret ||
-    config.cookieSecret ||
-    'sabms-enterprise-secure-cookie-secret-key-2026';
+  const hmacSecret = secret !== undefined ? secret : config.cookieSecret;
+  if (!hmacSecret) {
+    return false;
+  }
   try {
     const expectedSignature = crypto
       .createHmac('sha256', hmacSecret)

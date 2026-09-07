@@ -369,7 +369,10 @@ const hashOtp = (
   if (!otp || typeof otp !== 'string') {
     throw new Error('OTP string is required for hashing');
   }
-  const hmacSecret = secret || config.otp?.secret || 'default-sabms-otp-secret';
+  const hmacSecret = secret !== undefined ? secret : config.otp?.secret;
+  if (!hmacSecret) {
+    throw new Error('OTP HMAC secret is required for hashing');
+  }
   return crypto.createHmac(algorithm, hmacSecret).update(otp).digest('hex');
 };
 

@@ -1001,7 +1001,7 @@ describe('Logout & Token/Session Invalidation (Sprint 2.11)', () => {
         const tokenVal = rawCookie.split('=')[1];
         const decoded = jwt.decode(tokenVal);
         const jti = decoded.jti;
-        const familyId = decoded.familyId;
+        const _familyId = decoded.familyId;
 
         expect(inMemoryTokenMap.get(jti)).toBeDefined();
         expect(inMemoryTokenMap.get(jti).status).toBe(
@@ -1047,7 +1047,7 @@ describe('Logout & Token/Session Invalidation (Sprint 2.11)', () => {
           jti: currentJti,
           familyId: currentFamilyId,
         });
-        const otherToken = generateRefreshToken(mockActiveUser, {
+        const _otherToken = generateRefreshToken(mockActiveUser, {
           jti: otherJti,
           familyId: otherFamilyId,
         });

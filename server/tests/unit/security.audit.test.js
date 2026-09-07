@@ -2,15 +2,13 @@
 
 const request = require('supertest');
 const app = require('../../src/app/app');
-const { USER_ROLES, ACCOUNT_STATUSES } = require('../../src/shared/constants');
+const { USER_ROLES } = require('../../src/shared/constants');
 const {
   verifyAccessToken,
   verifyRefreshToken,
   generateAccessToken,
   generateRefreshToken,
   generateDeviceFingerprint,
-  verifyDeviceFingerprint,
-  extractSubnet,
 } = require('../../src/modules/auth/auth.helper');
 const {
   verifyPassword,
@@ -19,17 +17,11 @@ const {
 const {
   generateCsrfToken,
   verifyCsrfTokenSignature,
-  timingSafeTokenMatch,
   CSRF_COOKIE_NAME,
 } = require('../../src/core/middleware/csrf.middleware');
 const {
-  sanitizeXssString,
   sanitizeXssObject,
-  EXCLUDED_FIELDS,
 } = require('../../src/core/middleware/xss.middleware');
-const {
-  DISALLOWED_METHODS,
-} = require('../../src/core/middleware/hardening.middleware');
 
 describe('Sprint 2.21 — Final Sprint 2 Comprehensive Security Audit', () => {
   afterEach(() => {

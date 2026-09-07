@@ -202,7 +202,7 @@ const csrfProtection = (req, res, next) => {
     mustValidate = true;
   } else if (req.headers['x-csrf-protection'] === 'enforce') {
     mustValidate = true;
-  } else if (!isTest && config.isProduction) {
+  } else if (!isTest) {
     mustValidate = true;
   }
 

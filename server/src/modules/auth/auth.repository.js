@@ -18,12 +18,15 @@ const {
 } = require('./auth.constants');
 const {
   createOtpRedisKey,
+  createOtpAttemptsRedisKey,
   createOtpCooldownRedisKey,
   createOtpResendCountRedisKey,
   createPhoneOtpRedisKey,
+  createPhoneOtpAttemptsRedisKey,
   createPhoneOtpCooldownRedisKey,
   createPhoneOtpResendCountRedisKey,
   createPasswordResetOtpRedisKey,
+  createPasswordResetAttemptsRedisKey,
   createPasswordResetCooldownRedisKey,
   createPasswordResetRateRedisKey,
   createSessionRedisKey,
@@ -192,58 +195,74 @@ class AuthRepository {
    */
   async getEmailOtp(email) {
     const key = createOtpRedisKey(email);
+    const attemptsKey = createOtpAttemptsRedisKey(email);
     const redis = this._getRedis();
     const data = await redis.get(key);
     if (!data) return null;
 
     try {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      const attemptsVal = await redis.get(attemptsKey);
+      parsed.attempts = attemptsVal
+        ? parseInt(attemptsVal, 10)
+        : parsed.attempts || 0;
+      return parsed;
     } catch {
       return null;
     }
   }
 
   /**
-   * Deletes OTP record from Redis immediately.
+   * Retrieves current attempt count for active Email OTP challenge.
    *
    * @param {string} email - Target user email.
-   * @returns {Promise<number>} Number of keys removed (0 or 1).
+   * @returns {Promise<number>}
    */
-  async deleteEmailOtp(email) {
-    const key = createOtpRedisKey(email);
+  async getEmailOtpAttempts(email) {
+    const key = createOtpAttemptsRedisKey(email);
     const redis = this._getRedis();
-    return redis.del(key);
+    const val = await redis.get(key);
+    return val ? parseInt(val, 10) : 0;
   }
 
   /**
-   * Atomically increments the failed attempt count for the active OTP.
-   * Preserves the remaining TTL on the key.
+   * Deletes OTP record and associated attempt counter from Redis immediately.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<number>} Number of keys removed.
+   */
+  async deleteEmailOtp(email) {
+    const key = createOtpRedisKey(email);
+    const attemptsKey = createOtpAttemptsRedisKey(email);
+    const redis = this._getRedis();
+    return redis.del(key, attemptsKey);
+  }
+
+  /**
+   * Atomically increments the failed attempt count for the active Email OTP via Redis INCR.
+   * Eliminates read-modify-write race conditions and preserves remaining OTP TTL.
    *
    * @param {string} email - Target user email.
    * @returns {Promise<{ attempts: number, otpData: Object }|null>}
    */
   async incrementEmailOtpAttempts(email) {
     const key = createOtpRedisKey(email);
+    const attemptsKey = createOtpAttemptsRedisKey(email);
     const redis = this._getRedis();
-    const data = await redis.get(key);
-    if (!data) return null;
 
-    try {
-      const otpData = JSON.parse(data);
-      otpData.attempts = (otpData.attempts || 0) + 1;
+    const exists = await redis.exists(key);
+    if (!exists) return null;
 
+    const attempts = await redis.incr(attemptsKey);
+
+    if (attempts === 1) {
       const ttl = await redis.ttl(key);
       if (ttl > 0) {
-        await redis.set(key, JSON.stringify(otpData), 'EX', ttl);
-      } else {
-        await redis.del(key);
-        return null;
+        await redis.expire(attemptsKey, ttl);
       }
-
-      return { attempts: otpData.attempts, otpData };
-    } catch {
-      return null;
     }
+
+    return { attempts, otpData: { attempts } };
   }
 
   /**
@@ -319,6 +338,7 @@ class AuthRepository {
     const normalized = normalizeEmail(email);
     await Promise.all([
       redis.del(createOtpRedisKey(normalized)),
+      redis.del(createOtpAttemptsRedisKey(normalized)),
       redis.del(createOtpCooldownRedisKey(normalized)),
       redis.del(createOtpResendCountRedisKey(normalized)),
     ]);
@@ -349,58 +369,74 @@ class AuthRepository {
    */
   async getPhoneOtp(phone) {
     const key = createPhoneOtpRedisKey(phone);
+    const attemptsKey = createPhoneOtpAttemptsRedisKey(phone);
     const redis = this._getRedis();
     const data = await redis.get(key);
     if (!data) return null;
 
     try {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      const attemptsVal = await redis.get(attemptsKey);
+      parsed.attempts = attemptsVal
+        ? parseInt(attemptsVal, 10)
+        : parsed.attempts || 0;
+      return parsed;
     } catch {
       return null;
     }
   }
 
   /**
-   * Deletes Phone OTP record from Redis immediately.
+   * Retrieves current attempt count for active Phone OTP challenge.
    *
-   * @param {string} phone - Target user phone number.
-   * @returns {Promise<number>} Number of keys removed (0 or 1).
+   * @param {string} phone - Target user phone.
+   * @returns {Promise<number>}
    */
-  async deletePhoneOtp(phone) {
-    const key = createPhoneOtpRedisKey(phone);
+  async getPhoneOtpAttempts(phone) {
+    const key = createPhoneOtpAttemptsRedisKey(phone);
     const redis = this._getRedis();
-    return redis.del(key);
+    const val = await redis.get(key);
+    return val ? parseInt(val, 10) : 0;
   }
 
   /**
-   * Atomically increments the failed attempt count for the active Phone OTP.
-   * Preserves the remaining TTL on the key.
+   * Deletes Phone OTP record and associated attempt counter from Redis immediately.
+   *
+   * @param {string} phone - Target user phone number.
+   * @returns {Promise<number>} Number of keys removed.
+   */
+  async deletePhoneOtp(phone) {
+    const key = createPhoneOtpRedisKey(phone);
+    const attemptsKey = createPhoneOtpAttemptsRedisKey(phone);
+    const redis = this._getRedis();
+    return redis.del(key, attemptsKey);
+  }
+
+  /**
+   * Atomically increments the failed attempt count for the active Phone OTP via Redis INCR.
+   * Eliminates read-modify-write race conditions and preserves remaining OTP TTL.
    *
    * @param {string} phone - Target user phone number.
    * @returns {Promise<{ attempts: number, otpData: Object }|null>}
    */
   async incrementPhoneOtpAttempts(phone) {
     const key = createPhoneOtpRedisKey(phone);
+    const attemptsKey = createPhoneOtpAttemptsRedisKey(phone);
     const redis = this._getRedis();
-    const data = await redis.get(key);
-    if (!data) return null;
 
-    try {
-      const otpData = JSON.parse(data);
-      otpData.attempts = (otpData.attempts || 0) + 1;
+    const exists = await redis.exists(key);
+    if (!exists) return null;
 
+    const attempts = await redis.incr(attemptsKey);
+
+    if (attempts === 1) {
       const ttl = await redis.ttl(key);
       if (ttl > 0) {
-        await redis.set(key, JSON.stringify(otpData), 'EX', ttl);
-      } else {
-        await redis.del(key);
-        return null;
+        await redis.expire(attemptsKey, ttl);
       }
-
-      return { attempts: otpData.attempts, otpData };
-    } catch {
-      return null;
     }
+
+    return { attempts, otpData: { attempts } };
   }
 
   /**
@@ -479,6 +515,7 @@ class AuthRepository {
     const normalized = normalizePhone(phone);
     await Promise.all([
       redis.del(createPhoneOtpRedisKey(normalized)),
+      redis.del(createPhoneOtpAttemptsRedisKey(normalized)),
       redis.del(createPhoneOtpCooldownRedisKey(normalized)),
       redis.del(createPhoneOtpResendCountRedisKey(normalized)),
     ]);
@@ -513,58 +550,74 @@ class AuthRepository {
    */
   async getPasswordResetOtp(email) {
     const key = createPasswordResetOtpRedisKey(email);
+    const attemptsKey = createPasswordResetAttemptsRedisKey(email);
     const redis = this._getRedis();
     const data = await redis.get(key);
     if (!data) return null;
 
     try {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      const attemptsVal = await redis.get(attemptsKey);
+      parsed.attempts = attemptsVal
+        ? parseInt(attemptsVal, 10)
+        : parsed.attempts || 0;
+      return parsed;
     } catch {
       return null;
     }
   }
 
   /**
-   * Increments the verification attempt counter for a stored password reset OTP.
-   * Preserves remaining TTL or deletes key if expired.
+   * Retrieves current attempt count for active Password Reset OTP challenge.
+   *
+   * @param {string} email - Target user email.
+   * @returns {Promise<number>}
+   */
+  async getPasswordResetOtpAttempts(email) {
+    const key = createPasswordResetAttemptsRedisKey(email);
+    const redis = this._getRedis();
+    const val = await redis.get(key);
+    return val ? parseInt(val, 10) : 0;
+  }
+
+  /**
+   * Atomically increments the verification attempt counter for a stored password reset OTP via Redis INCR.
+   * Eliminates read-modify-write race conditions and preserves remaining OTP TTL.
    *
    * @param {string} email - Target user email.
    * @returns {Promise<{ attempts: number, otpData: Object }|null>}
    */
   async incrementPasswordResetOtpAttempts(email) {
     const key = createPasswordResetOtpRedisKey(email);
+    const attemptsKey = createPasswordResetAttemptsRedisKey(email);
     const redis = this._getRedis();
-    const data = await redis.get(key);
-    if (!data) return null;
 
-    try {
-      const otpData = JSON.parse(data);
-      otpData.attempts = (otpData.attempts || 0) + 1;
+    const exists = await redis.exists(key);
+    if (!exists) return null;
 
+    const attempts = await redis.incr(attemptsKey);
+
+    if (attempts === 1) {
       const ttl = await redis.ttl(key);
       if (ttl > 0) {
-        await redis.set(key, JSON.stringify(otpData), 'EX', ttl);
-      } else {
-        await redis.del(key);
-        return null;
+        await redis.expire(attemptsKey, ttl);
       }
-
-      return { attempts: otpData.attempts, otpData };
-    } catch {
-      return null;
     }
+
+    return { attempts, otpData: { attempts } };
   }
 
   /**
-   * Deletes Password Reset OTP record from Redis immediately.
+   * Deletes Password Reset OTP record and associated attempt counter from Redis immediately.
    *
    * @param {string} email - Target user email.
-   * @returns {Promise<number>} Number of keys removed (0 or 1).
+   * @returns {Promise<number>} Number of keys removed.
    */
   async deletePasswordResetOtp(email) {
     const key = createPasswordResetOtpRedisKey(email);
+    const attemptsKey = createPasswordResetAttemptsRedisKey(email);
     const redis = this._getRedis();
-    return redis.del(key);
+    return redis.del(key, attemptsKey);
   }
 
   /**
@@ -644,6 +697,7 @@ class AuthRepository {
     const normalized = normalizeEmail(email);
     await Promise.all([
       redis.del(createPasswordResetOtpRedisKey(normalized)),
+      redis.del(createPasswordResetAttemptsRedisKey(normalized)),
       redis.del(createPasswordResetCooldownRedisKey(normalized)),
       redis.del(createPasswordResetRateRedisKey(normalized)),
     ]);

@@ -7,16 +7,19 @@ const config = require('../../config/env.config');
 const {
   EMAIL_OTP_LENGTH,
   OTP_REDIS_KEY_PREFIX,
+  EMAIL_OTP_ATTEMPTS_KEY_PREFIX,
   OTP_COOLDOWN_KEY_PREFIX,
   OTP_RESEND_KEY_PREFIX,
   EMAIL_OTP_HASH_ALGORITHM,
   PHONE_OTP_LENGTH,
   PHONE_OTP_REDIS_KEY_PREFIX,
+  PHONE_OTP_ATTEMPTS_KEY_PREFIX,
   PHONE_OTP_COOLDOWN_KEY_PREFIX,
   PHONE_OTP_RESEND_KEY_PREFIX,
   PHONE_OTP_HASH_ALGORITHM,
   PASSWORD_RESET_OTP_LENGTH,
   PASSWORD_RESET_REDIS_KEY_PREFIX,
+  PASSWORD_RESET_ATTEMPTS_KEY_PREFIX,
   PASSWORD_RESET_REDIS_COOLDOWN_KEY_PREFIX,
   PASSWORD_RESET_REDIS_RATE_KEY_PREFIX,
   PASSWORD_RESET_OTP_HASH_ALGORITHM,
@@ -270,12 +273,30 @@ const createOtpResendCountRedisKey = (email) => {
 };
 
 /**
+ * Creates canonical Redis key for email OTP attempts tracking.
+ * @param {string} email
+ * @returns {string}
+ */
+const createOtpAttemptsRedisKey = (email) => {
+  return `${EMAIL_OTP_ATTEMPTS_KEY_PREFIX || 'auth:otp:email:attempts:'}${normalizeEmail(email)}`;
+};
+
+/**
  * Creates canonical Redis key for phone OTP storage.
  * @param {string} phone
  * @returns {string}
  */
 const createPhoneOtpRedisKey = (phone) => {
   return `${PHONE_OTP_REDIS_KEY_PREFIX}${normalizePhone(phone)}`;
+};
+
+/**
+ * Creates canonical Redis key for phone OTP attempts tracking.
+ * @param {string} phone
+ * @returns {string}
+ */
+const createPhoneOtpAttemptsRedisKey = (phone) => {
+  return `${PHONE_OTP_ATTEMPTS_KEY_PREFIX || 'auth:otp:phone:attempts:'}${normalizePhone(phone)}`;
 };
 
 /**
@@ -303,6 +324,15 @@ const createPhoneOtpResendCountRedisKey = (phone) => {
  */
 const createPasswordResetOtpRedisKey = (email) => {
   return `${PASSWORD_RESET_REDIS_KEY_PREFIX}${normalizeEmail(email)}`;
+};
+
+/**
+ * Creates canonical Redis key for password reset attempts tracking.
+ * @param {string} email
+ * @returns {string}
+ */
+const createPasswordResetAttemptsRedisKey = (email) => {
+  return `${PASSWORD_RESET_ATTEMPTS_KEY_PREFIX || 'auth:otp:reset:attempts:'}${normalizeEmail(email)}`;
 };
 
 /**
@@ -822,12 +852,15 @@ module.exports = {
   generatePhoneOtp,
   generatePasswordResetOtp,
   createOtpRedisKey,
+  createOtpAttemptsRedisKey,
   createOtpCooldownRedisKey,
   createOtpResendCountRedisKey,
   createPhoneOtpRedisKey,
+  createPhoneOtpAttemptsRedisKey,
   createPhoneOtpCooldownRedisKey,
   createPhoneOtpResendCountRedisKey,
   createPasswordResetOtpRedisKey,
+  createPasswordResetAttemptsRedisKey,
   createPasswordResetCooldownRedisKey,
   createPasswordResetRateRedisKey,
   hashOtp,

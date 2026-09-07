@@ -491,44 +491,100 @@ describe('Sprint 2.13 — Reset Password Workflow', () => {
   // 4. REPOSITORY METHOD TESTS (auth.repository.js)
   // ───────────────────────────────────────────────────────────────────────────
   describe('AuthRepository Reset Password & Session Invalidation Methods', () => {
-    it('20. should increment attempts and keep remaining TTL in incrementPasswordResetOtpAttempts', async () => {
+    it('20. should increment attempts and set TTL on first attempt in incrementPasswordResetOtpAttempts', async () => {
       const mockRedis = {
-        get: jest
-          .fn()
-          .mockResolvedValue(JSON.stringify({ otpHash: 'abc', attempts: 1 })),
+        exists: jest.fn().mockResolvedValue(1),
+        incr: jest.fn().mockResolvedValue(1),
         ttl: jest.fn().mockResolvedValue(250),
-        set: jest.fn().mockResolvedValue('OK'),
+        expire: jest.fn().mockResolvedValue(1),
       };
       jest.spyOn(authRepository, '_getRedis').mockReturnValue(mockRedis);
 
       const result =
         await authRepository.incrementPasswordResetOtpAttempts('jane@edu.com');
       expect(result).toEqual({
-        attempts: 2,
-        otpData: { otpHash: 'abc', attempts: 2 },
+        attempts: 1,
+        otpData: { attempts: 1 },
       });
-      expect(mockRedis.set).toHaveBeenCalledWith(
-        'auth:otp:reset:jane@edu.com',
-        JSON.stringify({ otpHash: 'abc', attempts: 2 }),
-        'EX',
+      expect(mockRedis.incr).toHaveBeenCalledWith(
+        'auth:otp:reset:attempts:jane@edu.com'
+      );
+      expect(mockRedis.expire).toHaveBeenCalledWith(
+        'auth:otp:reset:attempts:jane@edu.com',
         250
       );
     });
 
-    it('21. should delete key if TTL has expired in incrementPasswordResetOtpAttempts', async () => {
+    it('21. should return null if key does not exist in incrementPasswordResetOtpAttempts', async () => {
       const mockRedis = {
-        get: jest
-          .fn()
-          .mockResolvedValue(JSON.stringify({ otpHash: 'abc', attempts: 1 })),
-        ttl: jest.fn().mockResolvedValue(-1),
-        del: jest.fn().mockResolvedValue(1),
+        exists: jest.fn().mockResolvedValue(0),
+        incr: jest.fn(),
+        del: jest.fn(),
       };
       jest.spyOn(authRepository, '_getRedis').mockReturnValue(mockRedis);
 
       const result =
         await authRepository.incrementPasswordResetOtpAttempts('jane@edu.com');
       expect(result).toBeNull();
-      expect(mockRedis.del).toHaveBeenCalled();
+      expect(mockRedis.incr).not.toHaveBeenCalled();
+    });
+
+    it('M-01.3 Concurrent invalid password reset OTP attempts atomically exhaust attempts without race-condition bypass', async () => {
+      let atomicAttempts = 0;
+      let otpActive = true;
+
+      jest
+        .spyOn(authRepository, 'findByEmail')
+        .mockResolvedValue(mockExistingUser);
+      jest
+        .spyOn(authRepository, 'getPasswordResetOtp')
+        .mockImplementation(async () => {
+          if (!otpActive) return null;
+          return {
+            otpHash: 'valid-otp-hash-string-that-will-not-match',
+            attempts: atomicAttempts,
+          };
+        });
+      jest
+        .spyOn(authRepository, 'getPasswordResetOtpAttempts')
+        .mockImplementation(async () => atomicAttempts);
+      jest
+        .spyOn(authRepository, 'incrementPasswordResetOtpAttempts')
+        .mockImplementation(async () => {
+          if (!otpActive) return null;
+          atomicAttempts += 1;
+          return {
+            attempts: atomicAttempts,
+            otpData: { attempts: atomicAttempts },
+          };
+        });
+      jest
+        .spyOn(authRepository, 'deletePasswordResetOtp')
+        .mockImplementation(async () => {
+          otpActive = false;
+          return 1;
+        });
+
+      // Fire 10 concurrent requests
+      const requests = Array.from({ length: 10 }).map(() =>
+        request(app).post('/api/v1/auth/reset-password').send({
+          email: 'jane.doe@university.edu',
+          otp: '999999', // wrong OTP
+          newPassword: validNewPassword,
+        })
+      );
+
+      const responses = await Promise.all(requests);
+      const statusCodes = responses.map((r) => r.status);
+
+      const badRequests = statusCodes.filter((s) => s === 400);
+      const tooManyRequests = statusCodes.filter((s) => s === 429);
+
+      expect(badRequests.length).toBeGreaterThanOrEqual(4);
+      expect(tooManyRequests.length).toBeGreaterThanOrEqual(1);
+      expect(badRequests.length + tooManyRequests.length).toBe(10);
+      expect(atomicAttempts).toBe(5);
+      expect(otpActive).toBe(false);
     });
 
     it('22. should revoke all refresh tokens for a user in revokeAllUserTokens', async () => {

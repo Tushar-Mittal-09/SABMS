@@ -865,5 +865,114 @@ describe('Email OTP Verification Workflow (Sprint 2.5)', () => {
         );
       });
     });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // M-01 AUDIT REGRESSION: ATOMIC ATTEMPT COUNTERS & CONCURRENCY
+    // ─────────────────────────────────────────────────────────────────────────
+    describe('M-01 Audit Regression: Atomic Email OTP Attempt Counters', () => {
+      it('M-01.1 incrementEmailOtpAttempts atomically calls Redis INCR and sets TTL on first increment', async () => {
+        const mockRedis = {
+          exists: jest.fn().mockResolvedValue(1),
+          incr: jest.fn().mockResolvedValue(1),
+          ttl: jest.fn().mockResolvedValue(550),
+          expire: jest.fn().mockResolvedValue(1),
+        };
+        jest.spyOn(authRepository, '_getRedis').mockReturnValue(mockRedis);
+
+        const result = await authRepository.incrementEmailOtpAttempts(
+          'jane.doe@university.edu'
+        );
+
+        expect(result).toEqual({ attempts: 1, otpData: { attempts: 1 } });
+        expect(mockRedis.incr).toHaveBeenCalledWith(
+          'auth:otp:email:attempts:jane.doe@university.edu'
+        );
+        expect(mockRedis.expire).toHaveBeenCalledWith(
+          'auth:otp:email:attempts:jane.doe@university.edu',
+          550
+        );
+      });
+
+      it('M-01.2 incrementEmailOtpAttempts does NOT reset TTL on subsequent increments', async () => {
+        const mockRedis = {
+          exists: jest.fn().mockResolvedValue(1),
+          incr: jest.fn().mockResolvedValue(2),
+          ttl: jest.fn().mockResolvedValue(500),
+          expire: jest.fn(),
+        };
+        jest.spyOn(authRepository, '_getRedis').mockReturnValue(mockRedis);
+
+        const result = await authRepository.incrementEmailOtpAttempts(
+          'jane.doe@university.edu'
+        );
+
+        expect(result).toEqual({ attempts: 2, otpData: { attempts: 2 } });
+        expect(mockRedis.incr).toHaveBeenCalledWith(
+          'auth:otp:email:attempts:jane.doe@university.edu'
+        );
+        expect(mockRedis.expire).not.toHaveBeenCalled();
+      });
+
+      it('M-01.3 Concurrent invalid OTP attempts atomically exhaust attempts without race-condition bypass', async () => {
+        // Simulate atomic Redis state
+        let atomicAttempts = 0;
+        let otpActive = true;
+
+        jest
+          .spyOn(authRepository, 'findByEmail')
+          .mockResolvedValue(mockPendingUser);
+        jest
+          .spyOn(authRepository, 'getEmailOtp')
+          .mockImplementation(async () => {
+            if (!otpActive) return null;
+            return {
+              otpHash: 'valid-otp-hash-string-that-will-not-match',
+              attempts: atomicAttempts,
+              createdAt: new Date(),
+            };
+          });
+        jest
+          .spyOn(authRepository, 'getEmailOtpAttempts')
+          .mockImplementation(async () => atomicAttempts);
+        jest
+          .spyOn(authRepository, 'incrementEmailOtpAttempts')
+          .mockImplementation(async () => {
+            if (!otpActive) return null;
+            atomicAttempts += 1;
+            return {
+              attempts: atomicAttempts,
+              otpData: { attempts: atomicAttempts },
+            };
+          });
+        jest
+          .spyOn(authRepository, 'deleteEmailOtp')
+          .mockImplementation(async () => {
+            otpActive = false;
+            return 1;
+          });
+
+        // Fire 10 concurrent requests
+        const requests = Array.from({ length: 10 }).map(() =>
+          request(app).post('/api/v1/auth/verify-email').send({
+            email: 'jane.doe@university.edu',
+            otp: '999999', // wrong OTP
+          })
+        );
+
+        const responses = await Promise.all(requests);
+        const statusCodes = responses.map((r) => r.status);
+
+        // Exactly 4 requests should return 400 (attempts 1 to 4)
+        const badRequests = statusCodes.filter((s) => s === 400);
+        // At least 1 request should return 429 (attempt 5 hits maximum threshold)
+        const tooManyRequests = statusCodes.filter((s) => s === 429);
+
+        expect(badRequests.length).toBeGreaterThanOrEqual(4);
+        expect(tooManyRequests.length).toBeGreaterThanOrEqual(1);
+        expect(badRequests.length + tooManyRequests.length).toBe(10);
+        expect(atomicAttempts).toBe(5);
+        expect(otpActive).toBe(false);
+      });
+    });
   });
 });

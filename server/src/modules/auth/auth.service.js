@@ -323,7 +323,7 @@ class AuthService {
     }
 
     // 5. Check if attempt limit has already been exceeded
-    if (otpRecord.attempts >= EMAIL_OTP_MAX_ATTEMPTS) {
+    if ((otpRecord.attempts || 0) >= EMAIL_OTP_MAX_ATTEMPTS) {
       await this._authRepository.deleteEmailOtp(normalizedEmail);
       throw AppError.tooManyRequests(
         'Maximum verification attempts exceeded. Please request a new code.'
@@ -341,7 +341,7 @@ class AuthService {
         ? updateResult.attempts
         : (otpRecord.attempts || 0) + 1;
 
-      if (currentAttempts >= EMAIL_OTP_MAX_ATTEMPTS) {
+      if (!updateResult || currentAttempts >= EMAIL_OTP_MAX_ATTEMPTS) {
         await this._authRepository.deleteEmailOtp(normalizedEmail);
         throw AppError.tooManyRequests(
           'Maximum verification attempts exceeded. Please request a new code.'
@@ -575,7 +575,7 @@ class AuthService {
     }
 
     // 5. Check if attempt limit has already been exceeded
-    if (otpRecord.attempts >= PHONE_OTP_MAX_ATTEMPTS) {
+    if ((otpRecord.attempts || 0) >= PHONE_OTP_MAX_ATTEMPTS) {
       await this._authRepository.deletePhoneOtp(normalizedPhone);
       throw AppError.tooManyRequests(
         'Maximum verification attempts exceeded. Please request a new code.'
@@ -593,7 +593,7 @@ class AuthService {
         ? updateResult.attempts
         : (otpRecord.attempts || 0) + 1;
 
-      if (currentAttempts >= PHONE_OTP_MAX_ATTEMPTS) {
+      if (!updateResult || currentAttempts >= PHONE_OTP_MAX_ATTEMPTS) {
         await this._authRepository.deletePhoneOtp(normalizedPhone);
         throw AppError.tooManyRequests(
           'Maximum verification attempts exceeded. Please request a new code.'
@@ -1458,7 +1458,7 @@ class AuthService {
         ? updateResult.attempts
         : (otpRecord.attempts || 0) + 1;
 
-      if (currentAttempts >= PASSWORD_RESET_OTP_MAX_ATTEMPTS) {
+      if (!updateResult || currentAttempts >= PASSWORD_RESET_OTP_MAX_ATTEMPTS) {
         await this._authRepository.deletePasswordResetOtp(normalizedEmail);
         throw AppError.tooManyRequests(
           'Maximum verification attempts exceeded. Code invalidated. Please request a new one.'

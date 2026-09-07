@@ -843,5 +843,90 @@ describe('Phone OTP Verification Workflow (Sprint 2.6)', () => {
         expect(response.body.success).toBe(false);
       });
     });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // M-01 AUDIT REGRESSION: ATOMIC PHONE OTP ATTEMPT COUNTERS
+    // ─────────────────────────────────────────────────────────────────────────
+    describe('M-01 Audit Regression: Atomic Phone OTP Attempt Counters', () => {
+      it('M-01.1 incrementPhoneOtpAttempts atomically calls Redis INCR and sets TTL on first increment', async () => {
+        const mockRedis = {
+          exists: jest.fn().mockResolvedValue(1),
+          incr: jest.fn().mockResolvedValue(1),
+          ttl: jest.fn().mockResolvedValue(550),
+          expire: jest.fn().mockResolvedValue(1),
+        };
+        jest.spyOn(authRepository, '_getRedis').mockReturnValue(mockRedis);
+
+        const result =
+          await authRepository.incrementPhoneOtpAttempts('+919876543210');
+
+        expect(result).toEqual({ attempts: 1, otpData: { attempts: 1 } });
+        expect(mockRedis.incr).toHaveBeenCalledWith(
+          'auth:otp:phone:attempts:+919876543210'
+        );
+        expect(mockRedis.expire).toHaveBeenCalledWith(
+          'auth:otp:phone:attempts:+919876543210',
+          550
+        );
+      });
+
+      it('M-01.2 Concurrent invalid phone OTP attempts atomically exhaust attempts without race bypass', async () => {
+        let atomicAttempts = 0;
+        let otpActive = true;
+
+        jest
+          .spyOn(authRepository, 'findByPhone')
+          .mockResolvedValue(mockPendingUser);
+        jest
+          .spyOn(authRepository, 'getPhoneOtp')
+          .mockImplementation(async () => {
+            if (!otpActive) return null;
+            return {
+              otpHash: 'valid-phone-otp-hash-string',
+              attempts: atomicAttempts,
+              createdAt: new Date(),
+            };
+          });
+        jest
+          .spyOn(authRepository, 'getPhoneOtpAttempts')
+          .mockImplementation(async () => atomicAttempts);
+        jest
+          .spyOn(authRepository, 'incrementPhoneOtpAttempts')
+          .mockImplementation(async () => {
+            if (!otpActive) return null;
+            atomicAttempts += 1;
+            return {
+              attempts: atomicAttempts,
+              otpData: { attempts: atomicAttempts },
+            };
+          });
+        jest
+          .spyOn(authRepository, 'deletePhoneOtp')
+          .mockImplementation(async () => {
+            otpActive = false;
+            return 1;
+          });
+
+        // Fire 10 concurrent requests
+        const requests = Array.from({ length: 10 }).map(() =>
+          request(app).post('/api/v1/auth/verify-phone').send({
+            phone: '+919876543210',
+            otp: '999999', // wrong OTP
+          })
+        );
+
+        const responses = await Promise.all(requests);
+        const statusCodes = responses.map((r) => r.status);
+
+        const badRequests = statusCodes.filter((s) => s === 400);
+        const tooManyRequests = statusCodes.filter((s) => s === 429);
+
+        expect(badRequests.length).toBeGreaterThanOrEqual(4);
+        expect(tooManyRequests.length).toBeGreaterThanOrEqual(1);
+        expect(badRequests.length + tooManyRequests.length).toBe(10);
+        expect(atomicAttempts).toBe(5);
+        expect(otpActive).toBe(false);
+      });
+    });
   });
 });

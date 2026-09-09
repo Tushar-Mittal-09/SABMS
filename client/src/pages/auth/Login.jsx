@@ -113,7 +113,7 @@ export const Login = () => {
             onChange={handleInputChange}
             error={fieldErrors.email}
             placeholder="student@university.edu"
-            icon={<Mail className="h-5 w-5 text-gray-400" />}
+            icon={Mail}
             autoComplete="email"
             required
             disabled={isLoading}
@@ -130,7 +130,7 @@ export const Login = () => {
                 onChange={handleInputChange}
                 error={fieldErrors.password}
                 placeholder="Enter your password"
-                icon={<Lock className="h-5 w-5 text-gray-400" />}
+                icon={Lock}
                 autoComplete="current-password"
                 required
                 disabled={isLoading}
@@ -164,7 +164,7 @@ export const Login = () => {
             size="lg"
             fullWidth
             loading={isLoading}
-            icon={<LogIn className="h-5 w-5" />}
+            icon={LogIn}
           >
             {isLoading ? 'Signing In...' : 'Sign In'}
           </Button>

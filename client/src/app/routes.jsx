@@ -12,6 +12,7 @@ import ForgotPassword from '../pages/auth/ForgotPassword';
 import ResetPassword from '../pages/auth/ResetPassword';
 import ChangePassword from '../pages/auth/ChangePassword';
 import Sessions from '../pages/auth/Sessions';
+import LandingPage from '../pages/LandingPage';
 
 /**
  * Route guard requiring authenticated user session in memory.
@@ -116,9 +117,11 @@ export const AppRoutes = () => {
         }
       />
 
+      {/* Public Landing Page */}
+      <Route path="/" element={<LandingPage />} />
+
       {/* Default Fallback Navigation */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

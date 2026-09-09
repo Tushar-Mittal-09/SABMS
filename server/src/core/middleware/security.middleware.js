@@ -76,6 +76,8 @@ const corsSecurity = cors({
     'X-Request-ID',
     'Accept',
     'X-Requested-With',
+    'X-XSRF-TOKEN',
+    'X-CSRF-Token',
   ],
   exposedHeaders: ['X-Request-ID', 'Content-Range', 'X-Total-Count'],
   maxAge: 86400,

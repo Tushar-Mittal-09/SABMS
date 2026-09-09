@@ -9,7 +9,6 @@ import {
   KeyRound,
   RefreshCw,
   Trash2,
-  CheckCircle,
   AlertTriangle,
 } from 'lucide-react';
 import Button from '../../components/Button';
@@ -122,11 +121,7 @@ export const Sessions = () => {
 
           <div className="flex w-full items-center gap-2.5 sm:w-auto">
             <Link to="/change-password">
-              <Button
-                variant="outline"
-                size="sm"
-                icon={<KeyRound className="h-4 w-4" />}
-              >
+              <Button variant="outline" size="sm" icon={KeyRound}>
                 Password
               </Button>
             </Link>
@@ -135,7 +130,7 @@ export const Sessions = () => {
               size="sm"
               onClick={handleLogout}
               className="border-red-200 text-red-600 hover:bg-red-50"
-              icon={<LogOut className="h-4 w-4" />}
+              icon={LogOut}
             >
               Sign Out
             </Button>
@@ -157,7 +152,6 @@ export const Sessions = () => {
             type="success"
             title="Success"
             message={actionSuccess}
-            icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
             onClose={() => setActionSuccess(null)}
           />
         )}
@@ -183,7 +177,7 @@ export const Sessions = () => {
                 size="sm"
                 onClick={fetchSessions}
                 loading={isLoading}
-                icon={<RefreshCw className="h-3.5 w-3.5" />}
+                icon={RefreshCw}
               >
                 Refresh
               </Button>
@@ -194,7 +188,7 @@ export const Sessions = () => {
                   onClick={handleRevokeAllOthers}
                   loading={isRevokingAll}
                   className="border-amber-300 text-amber-700 hover:bg-amber-50"
-                  icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                  icon={AlertTriangle}
                 >
                   Revoke Others
                 </Button>
@@ -262,7 +256,7 @@ export const Sessions = () => {
                         onClick={() => handleRevokeSingle(sId)}
                         loading={revokingId === sId}
                         className="border-gray-200 text-red-600 hover:border-red-200 hover:bg-red-50"
-                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        icon={Trash2}
                       >
                         Revoke
                       </Button>

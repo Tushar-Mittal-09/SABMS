@@ -65,6 +65,15 @@ export const VerificationStatus = () => {
         {/* Action Buttons */}
         <div className="flex flex-col gap-3">
           <Button
+            variant="primary"
+            size="lg"
+            onClick={() => navigate('/login')}
+            className="w-full font-semibold"
+          >
+            Proceed to Sign In
+          </Button>
+
+          <Button
             variant="outline"
             size="md"
             icon={ArrowLeft}
@@ -75,8 +84,8 @@ export const VerificationStatus = () => {
           </Button>
 
           <p className="mt-2 text-center text-[11px] text-brand-muted dark:text-dark-muted">
-            Authentication services (Sprint 2.7+) will be enabled in upcoming
-            releases.
+            Your credentials and verified status are active. You can now sign in
+            to your SABMS account.
           </p>
         </div>
       </AuthCard>

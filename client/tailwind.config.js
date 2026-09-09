@@ -33,6 +33,18 @@ export default {
           success: '#3FB950',
           error: '#FF6B6B',
         },
+        miet: {
+          red: '#ED1C24',
+          redHover: '#C8161D',
+          dark: '#111111',
+          navy: '#071A2B',
+          navyDark: '#04101D',
+          navyLight: '#0D2740',
+          bg: '#F7F7F8',
+          border: '#E5E7EB',
+          borderDark: '#1F2937',
+          muted: '#6B7280',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],

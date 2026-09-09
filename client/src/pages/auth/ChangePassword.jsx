@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, ArrowLeft } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import AuthCard from '../../components/auth/AuthCard';
 import AuthHeader from '../../components/auth/AuthHeader';
@@ -122,7 +122,6 @@ export const ChangePassword = () => {
               type="success"
               title="Success"
               message={successMessage}
-              icon={<CheckCircle2 className="h-5 w-5 text-emerald-600" />}
               onClose={() => setSuccessMessage(null)}
             />
           </div>
@@ -171,7 +170,7 @@ export const ChangePassword = () => {
             size="lg"
             fullWidth
             loading={isLoading}
-            icon={<ShieldCheck className="h-5 w-5" />}
+            icon={ShieldCheck}
           >
             {isLoading ? 'Updating Password...' : 'Update Password'}
           </Button>

@@ -111,7 +111,7 @@ export const ForgotPassword = () => {
               onChange={handleEmailChange}
               error={fieldError}
               placeholder="student@university.edu"
-              icon={<Mail className="h-5 w-5 text-gray-400" />}
+              icon={Mail}
               autoComplete="email"
               required
               disabled={isLoading}
@@ -123,7 +123,7 @@ export const ForgotPassword = () => {
               size="lg"
               fullWidth
               loading={isLoading}
-              icon={<KeyRound className="h-5 w-5" />}
+              icon={KeyRound}
             >
               {isLoading ? 'Sending Code...' : 'Send Recovery Code'}
             </Button>

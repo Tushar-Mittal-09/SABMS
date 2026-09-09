@@ -142,7 +142,7 @@ export const ResetPassword = () => {
               onChange={handleInputChange}
               error={fieldErrors.email}
               placeholder="student@university.edu"
-              icon={<Mail className="h-5 w-5 text-gray-400" />}
+              icon={Mail}
               autoComplete="email"
               required
               disabled={isLoading}
@@ -199,7 +199,7 @@ export const ResetPassword = () => {
               size="lg"
               fullWidth
               loading={isLoading}
-              icon={<ShieldCheck className="h-5 w-5" />}
+              icon={ShieldCheck}
             >
               {isLoading ? 'Resetting Password...' : 'Reset Password'}
             </Button>

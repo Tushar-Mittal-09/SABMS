@@ -17,21 +17,17 @@ const refreshTokenSchema = new mongoose.Schema(
     jti: {
       type: String,
       required: [true, 'Token identifier (jti) is required'],
-      unique: true,
       trim: true,
-      index: true,
     },
     familyId: {
       type: String,
       required: [true, 'Family identifier (familyId) is required'],
       trim: true,
-      index: true,
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'User ID is required'],
-      index: true,
     },
     status: {
       type: String,
@@ -41,7 +37,6 @@ const refreshTokenSchema = new mongoose.Schema(
       },
       default: REFRESH_TOKEN_STATUSES.ACTIVE,
       required: true,
-      index: true,
     },
     issuedAt: {
       type: Date,
@@ -51,7 +46,6 @@ const refreshTokenSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: [true, 'Expiration date is required'],
-      index: true,
     },
     consumedAt: {
       type: Date,

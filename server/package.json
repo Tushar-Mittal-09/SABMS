@@ -21,6 +21,10 @@
   ],
   "author": "SABMS Engineering Team",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "dependencies": {
     "argon2": "^0.45.1",
     "compression": "^1.8.1",

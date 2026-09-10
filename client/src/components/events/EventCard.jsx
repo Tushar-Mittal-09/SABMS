@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, MapPin, Users } from 'lucide-react';
+import { Calendar, Clock, MapPin } from 'lucide-react';
 import Button from '../Button';
 
 /**
@@ -55,6 +55,8 @@ const formatTime = (time) => {
 export const EventCard = ({ event }) => {
   const navigate = useNavigate();
   const statusStyle = STATUS_STYLES[event.status] || STATUS_STYLES.UPCOMING;
+  const isFullyBooked =
+    typeof event.availableSeats === 'number' && event.availableSeats <= 0;
 
   return (
     <div
@@ -63,16 +65,23 @@ export const EventCard = ({ event }) => {
     >
       {/* Card Body */}
       <div className="flex flex-1 flex-col gap-3 p-5">
-        {/* Status Badge */}
+        {/* Status Badge & Availability */}
         <div className="flex items-center justify-between">
           <span
             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}
           >
             {statusStyle.label}
           </span>
-          <span className="text-xs font-medium text-brand-muted dark:text-dark-muted">
-            <Users className="mr-1 inline h-3.5 w-3.5" />
-            {event.availableSeats} / {event.totalSeats} seats
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-muted dark:text-dark-muted">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isFullyBooked
+                  ? 'bg-brand-error dark:bg-dark-error'
+                  : 'bg-brand-success dark:bg-dark-success'
+              }`}
+              aria-hidden="true"
+            />
+            {isFullyBooked ? 'Fully Booked' : 'Seats Available'}
           </span>
         </div>
 

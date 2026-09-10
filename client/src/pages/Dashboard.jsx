@@ -1,6 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, CalendarDays, Sparkles, SearchX } from 'lucide-react';
+import {
+  LogOut,
+  User,
+  CalendarDays,
+  Sparkles,
+  SearchX,
+  Search,
+  Filter,
+} from 'lucide-react';
 import { useAuthStore } from '../store/auth.store';
 import { eventsApi } from '../services/events.api';
 import EventCard from '../components/events/EventCard';
@@ -8,19 +16,27 @@ import Loading from '../components/Loading';
 import Alert from '../components/Alert';
 import Button from '../components/Button';
 
+const AUDITORIUM_FILTERS = [
+  { id: 'filter-all', label: 'All Auditoriums', value: '' },
+  { id: 'filter-aud-1', label: 'Auditorium 1', value: 'AUDITORIUM_1' },
+  { id: 'filter-aud-2', label: 'Auditorium 2', value: 'AUDITORIUM_2' },
+  { id: 'filter-aud-3', label: 'Auditorium 3', value: 'AUDITORIUM_3' },
+];
+
 /**
  * Student Dashboard Page
  *
  * Authenticated student-only page serving as the primary hub for event discovery.
- * Fetches events from the backend API and splits into Upcoming / Ongoing sections.
- *
- * States: Loading → Data (with events) → Empty (no events) → Error (API failure)
+ * Fetches events from the backend API with auditorium filtering and real-time search.
+ * Splits results into Upcoming and Ongoing sections.
  */
 export const Dashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
 
   const [events, setEvents] = useState([]);
+  const [selectedAuditorium, setSelectedAuditorium] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -28,14 +44,18 @@ export const Dashboard = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await eventsApi.listEvents({ limit: 50 });
+      const params = { limit: 50 };
+      if (selectedAuditorium) {
+        params.auditorium = selectedAuditorium;
+      }
+      const response = await eventsApi.listEvents(params);
       setEvents(response?.data?.events || []);
     } catch (err) {
       setError(err?.message || 'Failed to load events. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedAuditorium]);
 
   useEffect(() => {
     fetchEvents();
@@ -46,9 +66,21 @@ export const Dashboard = () => {
     navigate('/login', { replace: true });
   };
 
+  // Filter events by search query in memory
+  const filteredEvents = useMemo(() => {
+    if (!searchQuery.trim()) return events;
+    const q = searchQuery.toLowerCase().trim();
+    return events.filter(
+      (e) =>
+        (e.name && e.name.toLowerCase().includes(q)) ||
+        (e.description && e.description.toLowerCase().includes(q)) ||
+        (e.auditoriumName && e.auditoriumName.toLowerCase().includes(q))
+    );
+  }, [events, searchQuery]);
+
   // Split events by status for sectioned display
-  const upcomingEvents = events.filter((e) => e.status === 'UPCOMING');
-  const ongoingEvents = events.filter((e) => e.status === 'ONGOING');
+  const upcomingEvents = filteredEvents.filter((e) => e.status === 'UPCOMING');
+  const ongoingEvents = filteredEvents.filter((e) => e.status === 'ONGOING');
 
   return (
     <div className="min-h-screen bg-brand-bg font-sans dark:bg-dark-bg">
@@ -91,7 +123,7 @@ export const Dashboard = () => {
       {/* ─── Main Content ──────────────────────────────────────────── */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Welcome Banner */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="mb-1 flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-brand-gold" />
             <h1 className="text-2xl font-bold text-brand-navy dark:text-dark-text">
@@ -101,6 +133,44 @@ export const Dashboard = () => {
           <p className="text-sm text-brand-muted dark:text-dark-muted">
             Discover upcoming events and reserve your seat.
           </p>
+        </div>
+
+        {/* ─── Search & Filters Bar ───────────────────────────────── */}
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          {/* Search Input */}
+          <div className="relative flex-1 sm:max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted dark:text-dark-muted" />
+            <input
+              type="text"
+              id="event-search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search events by name, topic..."
+              className="w-full rounded-lg border border-brand-border bg-brand-surface py-2 pl-9 pr-4 text-sm text-brand-text placeholder-brand-muted transition-colors focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue dark:border-dark-border dark:bg-dark-surface dark:text-dark-text dark:placeholder-dark-muted"
+            />
+          </div>
+
+          {/* Auditorium Filter Chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Filter className="hidden h-4 w-4 text-brand-muted dark:text-dark-muted sm:block" />
+            {AUDITORIUM_FILTERS.map((filter) => {
+              const isActive = selectedAuditorium === filter.value;
+              return (
+                <button
+                  key={filter.id}
+                  id={filter.id}
+                  onClick={() => setSelectedAuditorium(filter.value)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-brand-navy text-white shadow-sm dark:bg-brand-blue'
+                      : 'border border-brand-border bg-brand-surface text-brand-muted hover:border-brand-blue hover:text-brand-text dark:border-dark-border dark:bg-dark-surface dark:text-dark-muted dark:hover:border-dark-blue dark:hover:text-dark-text'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* ─── Loading State ──────────────────────────────────────── */}
@@ -138,14 +208,49 @@ export const Dashboard = () => {
               No Events Available
             </h2>
             <p className="max-w-sm text-sm text-brand-muted dark:text-dark-muted">
-              There are no upcoming or ongoing events at the moment. Check back
-              later for new events!
+              {selectedAuditorium
+                ? 'There are no upcoming or ongoing events scheduled for this auditorium.'
+                : 'There are no upcoming or ongoing events at the moment. Check back later!'}
             </p>
           </div>
         )}
 
+        {/* ─── No Search Results State ─────────────────────────────── */}
+        {!isLoading &&
+          !error &&
+          events.length > 0 &&
+          filteredEvents.length === 0 && (
+            <div
+              className="flex flex-col items-center justify-center py-20 text-center"
+              id="dashboard-no-search-results"
+            >
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-lightBlue dark:bg-dark-surface2">
+                <SearchX className="h-8 w-8 text-brand-blue dark:text-dark-blue" />
+              </div>
+              <h2 className="mb-2 text-lg font-semibold text-brand-text dark:text-dark-text">
+                No Matching Events
+              </h2>
+              <p className="max-w-sm text-sm text-brand-muted dark:text-dark-muted">
+                No events match &ldquo;{searchQuery}&rdquo;. Try adjusting your
+                search keywords or clearing the filter.
+              </p>
+              <div className="mt-4">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedAuditorium('');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+          )}
+
         {/* ─── Events Sections ────────────────────────────────────── */}
-        {!isLoading && !error && events.length > 0 && (
+        {!isLoading && !error && filteredEvents.length > 0 && (
           <div className="space-y-10" id="dashboard-events">
             {/* Ongoing Events */}
             {ongoingEvents.length > 0 && (

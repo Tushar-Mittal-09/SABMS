@@ -86,6 +86,9 @@ export const EventDetails = () => {
     ? STATUS_DISPLAY[event.status] || STATUS_DISPLAY.UPCOMING
     : null;
 
+  const isFullyBooked =
+    typeof event?.availableSeats === 'number' && event.availableSeats <= 0;
+
   return (
     <div className="min-h-screen bg-brand-bg font-sans dark:bg-dark-bg">
       {/* ─── Top Bar ──────────────────────────────────────────────── */}
@@ -192,9 +195,16 @@ export const EventDetails = () => {
                     <p className="text-xs font-medium uppercase tracking-wider text-brand-muted dark:text-dark-muted">
                       Availability
                     </p>
-                    <p className="text-sm font-semibold text-brand-text dark:text-dark-text">
-                      {event.availableSeats} / {event.totalSeats} seats
-                      available
+                    <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-text dark:text-dark-text">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          isFullyBooked
+                            ? 'bg-brand-error dark:bg-dark-error'
+                            : 'bg-brand-success dark:bg-dark-success'
+                        }`}
+                        aria-hidden="true"
+                      />
+                      {isFullyBooked ? 'Fully Booked' : 'Seats Available'}
                     </p>
                   </div>
                 </div>

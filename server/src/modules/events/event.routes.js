@@ -8,10 +8,13 @@ const {
 const {
   validateParams,
   validateQuery,
+  validateBody,
 } = require('../../core/middleware/validateRequest.middleware');
 const { USER_ROLES } = require('../../shared/constants');
 const { eventIdParamSchema, listEventsQuerySchema } = require('./event.schema');
+const { createBookingSchema } = require('../bookings/booking.schema');
 const eventController = require('./event.controller');
+const bookingController = require('../bookings/booking.controller');
 
 const router = express.Router();
 
@@ -46,6 +49,39 @@ router.get(
   authorize(USER_ROLES.STUDENT),
   validateParams(eventIdParamSchema),
   eventController.getEventById
+);
+
+// ─── Seat Selection & Booking Routes ────────────────────────────────────────
+
+/**
+ * GET /api/v1/events/:eventId/seats
+ *
+ * Retrieves the seat map with authoritative availability for the selected event.
+ * Requires student authentication and authorization.
+ */
+router.get(
+  '/:eventId/seats',
+  authenticate,
+  authorize(USER_ROLES.STUDENT),
+  validateParams(eventIdParamSchema),
+  bookingController.getEventSeats
+);
+
+/**
+ * POST /api/v1/events/:eventId/bookings
+ *
+ * Atomically reserves one seat for an event.
+ * Derives user ID strictly from req.user.
+ * Derives auditorium strictly from event record.
+ * Requires student authentication and authorization.
+ */
+router.post(
+  '/:eventId/bookings',
+  authenticate,
+  authorize(USER_ROLES.STUDENT),
+  validateParams(eventIdParamSchema),
+  validateBody(createBookingSchema),
+  bookingController.createBooking
 );
 
 module.exports = {

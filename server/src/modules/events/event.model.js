@@ -138,10 +138,13 @@ eventSchema.pre('validate', function (next) {
         this.availableSeats = this.totalSeats;
       }
     } catch (err) {
-      return next(err);
+      if (typeof next === 'function') return next(err);
+      throw err;
     }
   }
-  next();
+  if (typeof next === 'function') {
+    next();
+  }
 });
 
 // ─── Database Indexes ────────────────────────────────────────────────────────

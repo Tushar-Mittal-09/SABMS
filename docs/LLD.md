@@ -440,3 +440,32 @@ class AppError extends Error {
 - **Components**: `xss.middleware.js`, Express application pipeline.
 - **Workflow**: Global middleware intercepts incoming `req.body`, `req.query`, and `req.params`. Recursively traverses objects and strips dangerous constructs (`<script>`, inline `on*` event handlers, and `javascript:` URIs) using custom regular expressions (custom regex stripper, not DOMPurify/jsdom). Sensitive fields (`password`, `newPassword`, `currentPassword`, `confirmPassword`) are strictly excluded from sanitization to preserve entropy and user-selected special characters.
 - **Sprint Task**: Sprint 2.19 (XSS Protection).
+
+### SD-19: Booking Confirmation & Success Flow `[IMPLEMENTED - STEP 4]`
+
+- **Purpose**: Interactive seat confirmation and authoritative success presentation for student auditorium reservations.
+- **Components**:
+  - `client/src/pages/SeatSelection.jsx`
+  - `client/src/services/bookings.api.js`
+  - `server/src/modules/bookings/booking.controller.js`
+  - `server/src/modules/bookings/booking.service.js`
+  - `server/src/modules/bookings/booking.repository.js`
+  - `server/src/modules/bookings/booking.model.js`
+- **Workflow**:
+  1. **Selection & Summary Dock**: Student clicks an available seat (`AVAILABLE`). Memory-only selection state (`selectedSeat`) updates. The docked **Booking Summary** panel appears showing fixed immutable event attributes (Event Name, Auditorium, Date, Start Time) and the selected seat (`label` and `seatId`).
+  2. **Confirmation Action**: Student clicks `[ Confirm Booking ]`. Client immediately engages submission lock (`isBooking: true`), changing button to `[ Booking... ]` with `Loader2` spinner and disabling double-clicks.
+  3. **Authoritative Backend Execution**:
+     - Client issues `POST /api/v1/events/:eventId/bookings` with payload `{ seatId }`.
+     - Backend extracts `userId` strictly from authenticated JWT (`req.user.id`).
+     - Backend derives `auditorium` strictly from the Event model (`event.auditorium`).
+     - Backend enforces time boundary (`currentTime < eventStartDateTime`) and bookability rules.
+     - Atomic MongoDB insertion via `createBookingWithRetry` succeeds against compound unique indexes (`eventId + seatId` and `eventId + user`).
+  4. **Success State Transition**:
+     - Response arrives: `{ success: true, data: { booking: { bookingReference, eventName, auditoriumName, seatLabel, seatId, eventDate, startTime, status: 'CONFIRMED' } } }`.
+     - Axios interceptor unrolls to `response.data`.
+     - `SeatSelection.jsx` sets `bookingSuccess` state and clears `selectedSeat`.
+     - Interactive map unmounts, revealing the **Booking Confirmed!** success card with real booking reference, confirmed badge, and navigation buttons.
+  5. **Conflict Recovery (HTTP 409)**:
+     - If another student booked the seat first, server returns `409 Conflict`.
+     - Client displays warning alert: _"That seat was just booked by another student. Please select another seat."_
+     - Client clears `selectedSeat` and triggers silent background refresh (`fetchSeatMap(true)`), updating the conflicted seat to `BOOKED` (`✕`) while keeping the UI responsive.

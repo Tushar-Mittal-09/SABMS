@@ -140,4 +140,122 @@ describe('Auditorium Configuration', () => {
       );
     });
   });
+
+  describe('formatSeatId and parseSeatId', () => {
+    const {
+      formatSeatId,
+      parseSeatId,
+    } = require('../../src/shared/constants/auditoriumConfig');
+
+    it('should format canonical seat ID with 2-digit zero-padding', () => {
+      expect(formatSeatId('C', 4)).toBe('C-04');
+      expect(formatSeatId('c', '12')).toBe('C-12');
+      expect(formatSeatId('A', 1)).toBe('A-01');
+      expect(formatSeatId('O', 24)).toBe('O-24');
+    });
+
+    it('should parse canonical seatId C-04', () => {
+      const parsed = parseSeatId('C-04');
+      expect(parsed).toEqual({
+        row: 'C',
+        number: 4,
+        columnSection: 1,
+        label: 'Row C, Seat 4',
+        seatId: 'C-04',
+      });
+    });
+
+    it('should parse unpadded seatId C-4 and normalize to C-04', () => {
+      const parsed = parseSeatId('C-4');
+      expect(parsed).toEqual({
+        row: 'C',
+        number: 4,
+        columnSection: 1,
+        label: 'Row C, Seat 4',
+        seatId: 'C-04',
+      });
+    });
+
+    it('should calculate correct column sections (1 to 4)', () => {
+      expect(parseSeatId('C-01').columnSection).toBe(1);
+      expect(parseSeatId('C-06').columnSection).toBe(1);
+      expect(parseSeatId('C-07').columnSection).toBe(2);
+      expect(parseSeatId('C-12').columnSection).toBe(2);
+      expect(parseSeatId('C-13').columnSection).toBe(3);
+      expect(parseSeatId('C-18').columnSection).toBe(3);
+      expect(parseSeatId('C-19').columnSection).toBe(4);
+      expect(parseSeatId('C-24').columnSection).toBe(4);
+    });
+
+    it('should return null for invalid row or seat number > 24', () => {
+      expect(parseSeatId('P-01')).toBeNull();
+      expect(parseSeatId('C-25')).toBeNull();
+      expect(parseSeatId('C-00')).toBeNull();
+      expect(parseSeatId('')).toBeNull();
+      expect(parseSeatId(null)).toBeNull();
+    });
+  });
+
+  describe('validateAuditoriumSeat', () => {
+    const {
+      validateAuditoriumSeat,
+    } = require('../../src/shared/constants/auditoriumConfig');
+
+    it('should validate available student seat', () => {
+      const res = validateAuditoriumSeat('AUDITORIUM_1', 'C-04');
+      expect(res.isValid).toBe(true);
+      expect(res.isReserved).toBe(false);
+      expect(res.seatId).toBe('C-04');
+      expect(res.row).toBe('C');
+      expect(res.number).toBe(4);
+      expect(res.columnSection).toBe(1);
+    });
+
+    it('should validate faculty/organizer reserved rows (A and B)', () => {
+      const resA = validateAuditoriumSeat('AUDITORIUM_1', 'A-01');
+      expect(resA.isValid).toBe(true);
+      expect(resA.isReserved).toBe(true);
+
+      const resB = validateAuditoriumSeat('AUDITORIUM_1', 'B-24');
+      expect(resB.isValid).toBe(true);
+      expect(resB.isReserved).toBe(true);
+    });
+
+    it('should reject seat for invalid auditorium', () => {
+      const res = validateAuditoriumSeat('CONFERENCE_ROOM', 'C-04');
+      expect(res.isValid).toBe(false);
+      expect(res.error).toContain('not a student-bookable auditorium');
+    });
+
+    it('should reject invalid seat format', () => {
+      const res = validateAuditoriumSeat('AUDITORIUM_1', 'Z-99');
+      expect(res.isValid).toBe(false);
+      expect(res.error).toContain('does not exist');
+    });
+  });
+
+  describe('generateAuditoriumSeatMap', () => {
+    const {
+      generateAuditoriumSeatMap,
+    } = require('../../src/shared/constants/auditoriumConfig');
+
+    it('should generate 360 total seats (48 reserved + 312 student)', () => {
+      const map = generateAuditoriumSeatMap('AUDITORIUM_1');
+      expect(map).toHaveLength(360);
+
+      const reserved = map.filter((s) => s.isReserved);
+      const student = map.filter((s) => !s.isReserved);
+
+      expect(reserved).toHaveLength(48);
+      expect(student).toHaveLength(312);
+      expect(reserved.every((s) => s.status === 'RESERVED')).toBe(true);
+      expect(student.every((s) => s.status === 'AVAILABLE')).toBe(true);
+    });
+
+    it('should throw for invalid auditorium code', () => {
+      expect(() => generateAuditoriumSeatMap('FAKE_ROOM')).toThrow(
+        'Invalid auditorium code'
+      );
+    });
+  });
 });

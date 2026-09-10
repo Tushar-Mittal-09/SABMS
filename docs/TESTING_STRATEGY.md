@@ -140,12 +140,35 @@
 
 ---
 
-## 5. Verified Sprint 2 Test Telemetry
+## 5. Verified Sprint 2 & Step 4 Test Telemetry
 
-- **Total Test Suites**: 27 passed, 27 total (100%)
-- **Total Test Cases**: 592 passed, 592 total (100%)
-- **Snapshots**: 0 total
-- **Process Termination**: Clean exit (exit code 0) without open handles or `--forceExit` (Jest executed in ~15s)
+### Backend Telemetry (Jest)
+
+- **Total Test Suites**: 31 passed, 31 total (100%)
+- **Total Test Cases**: 662 passed, 662 total (100%)
+- **Booking Unit Suite**: 22 passed, 22 total (`booking.api.test.js`)
 - **Server Linter**: 0 errors, 0 warnings (`eslint .`)
+
+### Frontend Telemetry (Node Test Runner & Vite)
+
+- **Seat Selection & Booking Suite**: 15 passed, 15 total (`seat-selection.test.mjs`)
 - **Client Linter**: 0 errors, 0 warnings (`eslint .`)
-- **Client Production Build**: Verified with Vite (`vite build` in 6.48s; 1663 modules transformed)
+- **Client Production Build**: Verified with Vite (`vite build` exited 0; 1686 modules transformed)
+
+### Step 4 Test Cases (`client/tests/seat-selection.test.mjs`)
+
+- [x] `TC-BOOK-001`: No seat selected → confirmation disabled (`Select a Seat`, disabled).
+- [x] `TC-BOOK-002`: Available seat selected → confirmation enabled (`Confirm Booking`, enabled).
+- [x] `TC-BOOK-003`: Selected seat summary displays non-modifiable Event, Auditorium, Date, Time, and Seat.
+- [x] `TC-BOOK-004`: Confirm booking triggers API with correct `eventId` and `seatId`.
+- [x] `TC-BOOK-005`: Button enters submitting state (`Booking...` disabled with spinner).
+- [x] `TC-BOOK-006`: Duplicate submission prevented via client-side submission lock.
+- [x] `TC-BOOK-007`: Successful booking transitions to success card and clears selection.
+- [x] `TC-BOOK-008`: Real booking reference displayed from API response (`BK-XXXXXXXX-XXXXXX`).
+- [x] `TC-BOOK-009`: Real booking status displayed (`CONFIRMED`).
+- [x] `TC-BOOK-010`: HTTP 409 conflict displays user-friendly message.
+- [x] `TC-BOOK-011`: HTTP 409 conflict triggers background seat map refresh and clears selection.
+- [x] `TC-BOOK-012`: API errors (401, 404, 422) display sanitized messages without exposing database internals.
+- [x] `TC-BOOK-013`: Loading state renders correctly during initial fetch.
+- [x] `TC-BOOK-014`: Envelope mapping verified (zero fake/hardcoded success data).
+- [x] `TC-BOOK-015`: Responsive column sections and zero horizontal overflow verified.

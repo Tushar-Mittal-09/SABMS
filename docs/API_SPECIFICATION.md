@@ -857,3 +857,127 @@
   - `400 Bad Request`: Invalid ObjectId format.
   - `401 Unauthorized`: Missing or invalid JWT access token.
   - `404 Not Found`: Event not found or not visible to students.
+
+---
+
+### 11. Seat Selection & Booking Endpoints (`bookings`)
+
+#### `GET /api/v1/events/:eventId/seats`
+
+- **Description**: Retrieves authoritative auditorium seating layout and availability for a student-visible event.
+- **Access**: Authenticated (`STUDENT`, `FACULTY`, `ADMIN`, `VENUE_MANAGER`, `ORGANIZER`)
+- **URL Parameters**:
+  - `eventId` (24-character hexadecimal MongoDB ObjectId).
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Seat map retrieved successfully",
+    "data": {
+      "event": {
+        "id": "6aa28c819bf76dc21e54c534",
+        "name": "AI & Machine Learning Workshop [Demo]",
+        "description": "Interactive hands-on session.",
+        "auditorium": "AUDITORIUM_1",
+        "auditoriumName": "Auditorium 1",
+        "date": "2026-09-20T00:00:00.000Z",
+        "startTime": "10:00",
+        "endTime": "13:00",
+        "status": "UPCOMING",
+        "isBookingClosed": false
+      },
+      "auditorium": {
+        "code": "AUDITORIUM_1",
+        "name": "Auditorium 1",
+        "columns": 4,
+        "rows": 15,
+        "facultyReservedRows": 2,
+        "studentSeatsPerRow": 6,
+        "seatsPerRow": 24,
+        "totalSeats": 360,
+        "totalFacultySeats": 48,
+        "totalStudentSeats": 312
+      },
+      "seats": [
+        {
+          "seatId": "A-01",
+          "row": "A",
+          "number": 1,
+          "columnSection": 1,
+          "label": "Row A, Seat 1",
+          "isReserved": true,
+          "status": "RESERVED"
+        },
+        {
+          "seatId": "C-04",
+          "row": "C",
+          "number": 4,
+          "columnSection": 1,
+          "label": "Row C, Seat 4",
+          "isReserved": false,
+          "status": "AVAILABLE"
+        }
+      ],
+      "summary": {
+        "totalSeats": 360,
+        "totalFacultySeats": 48,
+        "totalStudentSeats": 312,
+        "bookedStudentSeats": 1,
+        "availableStudentSeats": 311,
+        "isFullyBooked": false
+      }
+    },
+    "meta": null
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or invalid Bearer JWT.
+  - `404 Not Found`: Event does not exist, is cancelled, or completed.
+  - `422 Unprocessable Entity`: Invalid event ID format or unsupported auditorium.
+
+#### `POST /api/v1/events/:eventId/bookings`
+
+- **Description**: Atomically reserves a single student seat for an upcoming event. Student identity is strictly extracted from `req.user.id`; auditorium is strictly derived from `event.auditorium`.
+- **Access**: Authenticated (`STUDENT` role strictly enforced)
+- **URL Parameters**:
+  - `eventId` (24-character hexadecimal MongoDB ObjectId).
+- **Request Body**:
+  ```json
+  {
+    "seatId": "C-04"
+  }
+  ```
+- **Success Response (`201 Created`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Seat booked successfully",
+    "data": {
+      "booking": {
+        "id": "6aa28c819bf76dc21e54c999",
+        "bookingReference": "BK-MTVQPDVS-1CDECF",
+        "eventId": "6aa28c819bf76dc21e54c534",
+        "eventName": "AI & Machine Learning Workshop [Demo]",
+        "auditorium": "AUDITORIUM_1",
+        "auditoriumName": "Auditorium 1",
+        "seatId": "C-04",
+        "seatLabel": "Row C, Seat 4",
+        "status": "CONFIRMED",
+        "eventDate": "2026-09-20T00:00:00.000Z",
+        "startTime": "10:00",
+        "endTime": "13:00",
+        "createdAt": "2026-09-10T17:00:00.000Z"
+      }
+    },
+    "meta": null
+  }
+  ```
+- **Error Responses**:
+  - `400 / 422 Bad Request / Unprocessable Entity`: Missing `seatId`, invalid seat format, or attempting to book faculty-reserved row A or B.
+  - `401 Unauthorized`: Missing or invalid Bearer JWT.
+  - `403 Forbidden`: Authenticated user is not in `STUDENT` role (e.g., `FACULTY`).
+  - `404 Not Found`: Event not found or no longer available.
+  - `409 Conflict`:
+    - Seat was already booked by another student.
+    - Authenticated student already has a confirmed booking for this event.
+    - Event booking window has closed (`now >= startTime`), or event is `ONGOING`/`COMPLETED`/`CANCELLED`.

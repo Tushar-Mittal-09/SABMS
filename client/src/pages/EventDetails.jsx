@@ -89,6 +89,19 @@ export const EventDetails = () => {
   const isFullyBooked =
     typeof event?.availableSeats === 'number' && event.availableSeats <= 0;
 
+  const isPastStart = (() => {
+    if (!event?.date || !event?.startTime) return false;
+    const d = new Date(event.date);
+    const dateStr = d.toISOString().split('T')[0];
+    const [hours, minutes] = event.startTime.split(':').map(Number);
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(minutes).padStart(2, '0');
+    const eventStart = new Date(`${dateStr}T${hh}:${mm}:00.000Z`);
+    return Date.now() >= eventStart.getTime();
+  })();
+
+  const isBookable = event?.status === 'UPCOMING' && !isPastStart;
+
   return (
     <div className="min-h-screen bg-brand-bg font-sans dark:bg-dark-bg">
       {/* ─── Top Bar ──────────────────────────────────────────────── */}
@@ -223,16 +236,34 @@ export const EventDetails = () => {
 
             {/* Primary CTA */}
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button
-                variant="primary"
-                size="lg"
-                icon={Ticket}
-                className="flex-1 sm:flex-none"
-                onClick={() => navigate(`/events/${event._id}/seats`)}
-                id="choose-seat-btn"
-              >
-                Choose Your Seat
-              </Button>
+              {isBookable ? (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={Ticket}
+                  className="flex-1 sm:flex-none"
+                  onClick={() => navigate(`/events/${event._id}/seats`)}
+                  id="choose-seat-btn"
+                >
+                  Choose Your Seat
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  disabled
+                  className="flex-1 cursor-not-allowed opacity-80 sm:flex-none"
+                  id="choose-seat-btn"
+                >
+                  {event.status === 'ONGOING'
+                    ? 'Booking Closed (Event In Progress)'
+                    : event.status === 'COMPLETED'
+                      ? 'Event Completed'
+                      : event.status === 'CANCELLED'
+                        ? 'Event Cancelled'
+                        : 'Booking Closed'}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="lg"

@@ -63,14 +63,38 @@ graph TD
 
 ## 3. System Context & Bounded Contexts
 
-| Bounded Context     | Domain Boundary                                                             | Database Ownership                                                                                                  |
-| :------------------ | :-------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------ |
-| **`auth`**          | Identity provisioning, credential verification, OTP, JWT, session lifecycle | `User` (credentials), `RefreshToken` (`refresh-token.model.js` domain model) collections; Redis OTP & Session store |
-| **`users`**         | User profiles, account management, department associations                  | User collection                                                                                                     |
-| **`auditoriums`**   | Venues, seating layouts, AV & physical equipment                            | Auditorium, Equipment collections                                                                                   |
-| **`bookings`**      | Time-slot reservations, approval workflows, conflict detection              | Booking, SlotLock collections                                                                                       |
-| **`events`**        | Public event listings, ticketing, schedules                                 | Event, Ticket collections                                                                                           |
-| **`notifications`** | Email delivery, SMS OTPs, WebSocket alerts, audit logging                   | Notification, AuditLog collections                                                                                  |
+| Bounded Context     | Domain Boundary                                                                                                                                                          | Database Ownership                                                                                                  |
+| :------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------ |
+| **`auth`**          | Identity provisioning, credential verification, OTP, JWT, session lifecycle                                                                                              | `User` (credentials), `RefreshToken` (`refresh-token.model.js` domain model) collections; Redis OTP & Session store |
+| **`users`**         | User profiles, account management, department associations                                                                                                               | User collection                                                                                                     |
+| **`auditoriums`**   | Venues, seating layouts, AV & physical equipment                                                                                                                         | Auditorium, Equipment collections                                                                                   |
+| **`bookings`**      | Single-seat atomic reservation, compound unique indexes (`eventId + seatId`, `eventId + user`), server-derived auditorium, confirmation state machine, conflict recovery | Booking collection                                                                                                  |
+| **`events`**        | Public event directory, student event details, authoritative schedule and venue metadata                                                                                 | Event collection                                                                                                    |
+| **`notifications`** | Email delivery, SMS OTPs, WebSocket alerts, audit logging                                                                                                                | Notification, AuditLog collections                                                                                  |
+
+### 3.1 Booking Confirmation & Success Flow (Step 4)
+
+```
+Student Client (React)                 SABMS Backend API                     MongoDB Database
+       |                                      |                                     |
+       |--- 1. Selects Seat (C-04) ---------->|                                     |
+       |    [Booking Summary Rendered]        |                                     |
+       |                                      |                                     |
+       |--- 2. Clicks Confirm Booking ------->|                                     |
+       |    [Button: "Booking..." Disabled]   |                                     |
+       |    POST /api/v1/events/:id/bookings  |                                     |
+       |    { seatId: "C-04" }                |--- 3. Validate student auth, ------->|
+       |                                      |       time window, and seat config  |
+       |                                      |--- 4. Insert with unique indexes -->|
+       |                                      |       (atomic duplicate protection) |
+       |                                      |<-- 5. Saved Booking Document -------|
+       |<-- 6. HTTP 201 Created --------------|                                     |
+       |    { bookingReference, status, ... } |                                     |
+       |                                      |                                     |
+       |=== 7. Render Success Card ===========|                                     |
+       |    (Reference, Status: CONFIRMED,    |                                     |
+       |     Event, Auditorium, Seat, Date)   |                                     |
+```
 
 ---
 

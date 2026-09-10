@@ -17,6 +17,7 @@ import LandingPage from '../pages/LandingPage';
 // Student Pages
 import Dashboard from '../pages/Dashboard';
 import EventDetails from '../pages/EventDetails';
+import SeatSelection from '../pages/SeatSelection';
 
 /**
  * Route guard requiring authenticated user session in memory.
@@ -138,12 +139,12 @@ export const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-      {/* Seat selection — navigation contract for Step 3 */}
+      {/* Interactive Seat Selection Route */}
       <Route
         path="/events/:eventId/seats"
         element={
           <ProtectedRoute>
-            <Navigate to="/dashboard" replace />
+            <SeatSelection />
           </ProtectedRoute>
         }
       />

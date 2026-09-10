@@ -65,7 +65,13 @@ The Sprint 2 Authentication & Security scope encompasses 21 distinct functional 
 
 ### 4.3 Reservation & Booking Engine (`booking`)
 
-- Slot search, booking request submission, conflict detection, approval workflow, cancellation.
+- **4.3.1 Single-Seat Selection & Real-Time Availability (Step 3)**: Authoritative seat mapping (360 seats: 48 faculty-reserved rows A-B, 312 student seats rows C-O), conflict detection, time-boundary validation.
+- **4.3.2 Booking Confirmation & Success Flow (Step 4)**:
+  - **Booking Summary Presentation**: Explicit display of non-modifiable event metadata (Event Name, Auditorium, Date, Start Time) and selected student seat prior to submission.
+  - **Confirmation State Machine**: Disabled without selection (`Select a Seat`), enabled with single selection (`Confirm Booking`), locked with progress indicator during submission (`Booking...`), preventing duplicate requests.
+  - **Authoritative Booking Success State**: Real-time rendering of backend-confirmed details (Booking Reference `BK-XXXXXXXX-XXXXXX`, Event Name, Auditorium Name, Seat Label/ID, Date, Time, Status `CONFIRMED`).
+  - **HTTP 409 Conflict Handling**: Seamless notification ("That seat was just booked by another student. Please select another seat."), automatic state clearance, and background seat map refresh without exposing database internals.
+  - **Sanitized Error States**: User-friendly handling for expired sessions (401), missing events (404), closed booking windows (422), with zero stack trace or internal disclosure.
 
 ### 4.4 Event Scheduling & Calendar (`event`)
 

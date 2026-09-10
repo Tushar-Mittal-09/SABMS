@@ -83,11 +83,11 @@ const DEMO_EVENTS = [
     description:
       'An ongoing webinar on cybersecurity threats, prevention strategies, and ethical hacking fundamentals. ' +
       'Learn about penetration testing, secure coding, and career opportunities in cybersecurity. ' +
-      'This is a demo/development event for SABMS testing purposes.',
-    auditorium: AUDITORIUM_CODES.AUDITORIUM_1,
-    date: new Date('2026-09-10'),
-    startTime: '09:00',
-    endTime: '18:00',
+      'This is a demo/development event for SABMS presentation fixtures on 12 September 2026.',
+    auditorium: AUDITORIUM_CODES.AUDITORIUM_2,
+    date: new Date('2026-09-12'),
+    startTime: '08:00',
+    endTime: '23:00',
     status: EVENT_STATUS.ONGOING,
   },
   {

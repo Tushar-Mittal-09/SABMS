@@ -749,3 +749,111 @@
 
 - **Description**: Approve, reject, or cancel a booking reservation.
 - **Access**: Authenticated (`ADMIN`, `VENUE_MANAGER`)
+
+---
+
+### 4.6 Event Endpoints (`/api/v1/events`)
+
+#### `GET /api/v1/events`
+
+- **Description**: Query paginated student-visible events (filtered to `UPCOMING` and `ONGOING` statuses, excluding non-student venues like Conference Room).
+- **Access**: Authenticated (Students and all active authenticated users)
+- **Query Parameters**:
+  - `page` (number, default: `1`): Page number.
+  - `limit` (number, default: `12`): Number of events per page.
+  - `auditorium` (string, optional): Filter by auditorium identifier (`AUDITORIUM_1`, `AUDITORIUM_2`, `AUDITORIUM_3`).
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Events retrieved successfully",
+    "data": {
+      "events": [
+        {
+          "id": "64a7f8e9c1d2e3f4a5b6c7d9",
+          "title": "Annual Tech Symposium 2026",
+          "description": "Flagship tech symposium featuring keynote sessions and project expos.",
+          "auditorium": "AUDITORIUM_1",
+          "auditoriumName": "Auditorium 1",
+          "date": "2026-10-15T09:00:00.000Z",
+          "startTime": "09:00",
+          "endTime": "17:00",
+          "category": "TECHNICAL",
+          "bannerUrl": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&auto=format&fit=crop&q=80",
+          "organizer": {
+            "name": "Computer Science Society",
+            "department": "Computer Science & Engineering",
+            "contactEmail": "cs-society@miet.ac.in"
+          },
+          "pricing": {
+            "isFree": true,
+            "ticketPrice": 0
+          },
+          "status": "UPCOMING",
+          "totalSeats": 500,
+          "seatingConfig": {
+            "rows": 20,
+            "columns": 25,
+            "totalCapacity": 500
+          }
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 12,
+        "total": 1,
+        "totalPages": 1,
+        "hasNext": false,
+        "hasPrev": false
+      }
+    },
+    "meta": null
+  }
+  ```
+
+#### `GET /api/v1/events/:eventId`
+
+- **Description**: Fetch detailed information for a specific student-visible event. Returns 404 for completed, cancelled, or non-existent events.
+- **Access**: Authenticated (Students and all active authenticated users)
+- **URL Parameters**:
+  - `eventId` (24-character hexadecimal MongoDB ObjectId).
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Event retrieved successfully",
+    "data": {
+      "id": "64a7f8e9c1d2e3f4a5b6c7d9",
+      "title": "Annual Tech Symposium 2026",
+      "description": "Flagship tech symposium featuring keynote sessions and project expos.",
+      "auditorium": "AUDITORIUM_1",
+      "auditoriumName": "Auditorium 1",
+      "date": "2026-10-15T09:00:00.000Z",
+      "startTime": "09:00",
+      "endTime": "17:00",
+      "category": "TECHNICAL",
+      "bannerUrl": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&auto=format&fit=crop&q=80",
+      "organizer": {
+        "name": "Computer Science Society",
+        "department": "Computer Science & Engineering",
+        "contactEmail": "cs-society@miet.ac.in"
+      },
+      "pricing": {
+        "isFree": true,
+        "ticketPrice": 0
+      },
+      "status": "UPCOMING",
+      "totalSeats": 500,
+      "seatingConfig": {
+        "rows": 20,
+        "columns": 25,
+        "totalCapacity": 500
+      }
+    },
+    "meta": null
+  }
+  ```
+- **Error Responses**:
+  - `400 Bad Request`: Invalid ObjectId format.
+  - `401 Unauthorized`: Missing or invalid JWT access token.
+  - `404 Not Found`: Event not found or not visible to students.

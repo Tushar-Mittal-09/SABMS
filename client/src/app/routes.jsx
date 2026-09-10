@@ -14,6 +14,10 @@ import ChangePassword from '../pages/auth/ChangePassword';
 import Sessions from '../pages/auth/Sessions';
 import LandingPage from '../pages/LandingPage';
 
+// Student Pages
+import Dashboard from '../pages/Dashboard';
+import EventDetails from '../pages/EventDetails';
+
 /**
  * Route guard requiring authenticated user session in memory.
  */
@@ -37,7 +41,7 @@ export const ProtectedRoute = ({ children }) => {
 
 /**
  * Route guard for public-only auth routes (e.g., login, register).
- * Redirects already authenticated users to their active sessions/dashboard.
+ * Redirects already authenticated users to the Student Dashboard.
  */
 export const PublicOnlyRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -51,7 +55,7 @@ export const PublicOnlyRoute = ({ children }) => {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/sessions" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
@@ -99,7 +103,7 @@ export const AppRoutes = () => {
       <Route path="/verify-phone" element={<VerifyPhone />} />
       <Route path="/verification-status" element={<VerificationStatus />} />
 
-      {/* Protected Routes */}
+      {/* Protected Routes — Auth Management */}
       <Route
         path="/sessions"
         element={
@@ -113,6 +117,33 @@ export const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <ChangePassword />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected Routes — Student Dashboard & Events */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/events/:eventId"
+        element={
+          <ProtectedRoute>
+            <EventDetails />
+          </ProtectedRoute>
+        }
+      />
+      {/* Seat selection — navigation contract for Step 3 */}
+      <Route
+        path="/events/:eventId/seats"
+        element={
+          <ProtectedRoute>
+            <Navigate to="/dashboard" replace />
           </ProtectedRoute>
         }
       />

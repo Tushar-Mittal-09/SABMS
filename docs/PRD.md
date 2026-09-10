@@ -72,6 +72,13 @@ The Sprint 2 Authentication & Security scope encompasses 21 distinct functional 
   - **Authoritative Booking Success State**: Real-time rendering of backend-confirmed details (Booking Reference `BK-XXXXXXXX-XXXXXX`, Event Name, Auditorium Name, Seat Label/ID, Date, Time, Status `CONFIRMED`).
   - **HTTP 409 Conflict Handling**: Seamless notification ("That seat was just booked by another student. Please select another seat."), automatic state clearance, and background seat map refresh without exposing database internals.
   - **Sanitized Error States**: User-friendly handling for expired sessions (401), missing events (404), closed booking windows (422), with zero stack trace or internal disclosure.
+- **4.3.3 Email Confirmation & QR Ticket Generation (Step 5)**:
+  - **Secure Ticket Token**: 256-bit cryptographically secure opaque bearer token (`tkt_<hex64>`) generated via Node.js `crypto.randomBytes(32)`, stored with `select: false` and sparse unique index, never logged or exposed in generic responses.
+  - **QR Code Generation**: Authoritative QR matrix encoding minimal opaque payload (`{ t: ticketToken, ref: bookingReference }`) — zero passwords, JWTs, student PII, or database internals.
+  - **Booking Confirmation Email**: Professional HTML+text email with inline CID QR attachment (`cid:booking-ticket-qr`), containing event details, seat assignment, and booking reference. Strict omission of secrets.
+  - **Truthful Email Status Semantics**: Lifecycle states `PENDING → SENT | FAILED | NOT_CONFIGURED`. `SENT` is never reported unless SMTP transporter confirms dispatch with `messageId`. Booking remains `CONFIRMED` regardless of email outcome.
+  - **Ticket Retrieval Endpoint**: `GET /api/v1/bookings/:bookingId/ticket` with JWT authentication, strict IDOR protection (ownership or ADMIN), and fresh QR regeneration from persisted token.
+  - **Frontend Integration**: Backend-generated QR ticket rendered in booking success card, download-to-PNG functionality, and truthful email delivery status feedback (SENT/PENDING/FAILED/NOT_CONFIGURED).
 
 ### 4.4 Event Scheduling & Calendar (`event`)
 
@@ -98,3 +105,4 @@ The Sprint 2 Authentication & Security scope encompasses 21 distinct functional 
 | :------- | :--------- | :------------------------ | :------------------------------------------------------------------------- |
 | `v1.0.0` | 2026-08-08 | Senior Software Architect | Initial PRD Template Initialization                                        |
 | `v1.1.0` | 2026-09-07 | Senior Software Architect | Document Sprint 2 Completion (2.1–2.21 100% Complete & Accepted); Argon2id |
+| `v1.2.0` | 2026-09-11 | Senior Software Architect | Document Step 5: Email Confirmation & QR Ticket Generation (4.3.3)         |

@@ -1,10 +1,18 @@
 'use strict';
 
 const express = require('express');
+const { authenticate } = require('../../core/middleware/auth.middleware');
+const bookingController = require('./booking.controller');
 
 const router = express.Router();
 
-// Booking module root routes (reserved for future booking endpoints e.g. student bookings list)
+/**
+ * GET /api/v1/bookings/:bookingId/ticket
+ *
+ * Retrieves the secure QR ticket and event details for an authoritative booking.
+ * Protected by JWT authentication and strict student ownership check.
+ */
+router.get('/:bookingId/ticket', authenticate, bookingController.getTicket);
 
 module.exports = {
   bookingsRouter: router,

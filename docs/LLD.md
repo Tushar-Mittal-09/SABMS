@@ -469,3 +469,74 @@ class AppError extends Error {
      - If another student booked the seat first, server returns `409 Conflict`.
      - Client displays warning alert: _"That seat was just booked by another student. Please select another seat."_
      - Client clears `selectedSeat` and triggers silent background refresh (`fetchSeatMap(true)`), updating the conflicted seat to `BOOKED` (`✕`) while keeping the UI responsive.
+
+---
+
+## 8. Step 5 — Email Confirmation & QR Ticket Generation
+
+### 8.1 Ticket Token Schema & Security Model
+
+```javascript
+// In booking.model.js
+ticketToken: {
+  type: String,
+  unique: true,      // Sparse unique index prevents duplicate tokens
+  sparse: true,      // Allows null/undefined entries
+  select: false,     // NEVER included in default queries
+  trim: true,
+  index: true,
+}
+```
+
+- **Generation**: `crypto.randomBytes(32).toString('hex')` → prefix `tkt_` → 68-character opaque token (`tkt_<64hex>`).
+- **Protection**: `toJSON` and `toObject` transforms delete `ticketToken` from all serialized outputs.
+- **Storage**: Persisted alongside booking during `createBookingWithRetry()` with collision detection and regeneration.
+
+### 8.2 QR Payload Structure
+
+```json
+{
+  "t": "tkt_<64-hex-character-opaque-token>",
+  "ref": "BK-XXXXXXXX-XXXXXX"
+}
+```
+
+- **Strict omissions**: Zero passwords, zero JWTs, zero student PII, zero database ObjectIds, zero SMTP credentials.
+- **Encoding**: `qrcode.toDataURL()` (for client) and `qrcode.toBuffer()` (for email CID attachment), both PNG format with error correction level M.
+
+### 8.3 Email Composition & CID Embedding
+
+- **Transport**: Nodemailer SMTP via cached singleton transporter (`getTransporter()`).
+- **Subject**: `Booking Confirmed: <eventName> [<bookingReference>]`.
+- **HTML Template**: Professional card layout with booking details table, inline CID QR image (`<img src="cid:booking-ticket-qr" />`), arrival notice, and branded footer.
+- **Plain-Text Template**: Structured text fallback with all booking details.
+- **CID Attachment**: `{ filename: 'ticket-<ref>.png', content: qrBuffer, cid: 'booking-ticket-qr' }`.
+
+### 8.4 Email Status Lifecycle
+
+```
+PENDING → SENT     (SMTP transporter.sendMail succeeds with messageId)
+PENDING → FAILED   (SMTP error/timeout/rejection)
+PENDING → NOT_CONFIGURED  (SMTP credentials absent)
+```
+
+- **Rule**: `SENT` is never reported unless `transporter.sendMail()` resolves successfully.
+- **Independence**: Booking remains `CONFIRMED` regardless of email outcome. Email failure never triggers booking rollback.
+
+### 8.5 Ticket Retrieval Endpoint Flow
+
+1. `GET /api/v1/bookings/:bookingId/ticket` → `authenticate` middleware → `bookingController.getTicket`.
+2. `bookingService.getBookingTicket(bookingId, userId, userRole)`:
+   - `findBookingById(bookingId, includeToken=true)` fetches booking with `+ticketToken` projection.
+   - **IDOR check**: `booking.user.toString() === userId.toString()` OR `userRole === 'ADMIN'`. 403 Forbidden on mismatch.
+   - `generateTicketQrCode({ ticketToken, bookingReference })` regenerates fresh QR DataURL.
+   - Returns sanitized ticket object (no raw token).
+
+### 8.6 Frontend QR Ticket Integration
+
+- **Success Card Extension**: `#booking-success-card` renders `<img id="booking-qr-code" src={ticket.qrCode} />` from authoritative backend response.
+- **Download Handler**: Programmatic `<a>` element creation with `href=qrCode`, `download=SABMS-Ticket-<ref>.png`, and auto-click.
+- **Email Status Feedback**: Three visual states:
+  - `SENT` → emerald banner: "A confirmation email with your QR ticket has been sent..."
+  - `PENDING` → blue banner: "Your booking is confirmed! Confirmation email is being dispatched."
+  - `FAILED`/`NOT_CONFIGURED` → amber banner: "Your seat is confirmed! Please download or screenshot your QR ticket above."

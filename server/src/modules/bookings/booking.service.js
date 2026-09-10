@@ -1,5 +1,6 @@
 'use strict';
 
+const mongoose = require('mongoose');
 const Event = require('../events/event.model');
 const { EVENT_STATUS } = require('../events/event.constants');
 const {
@@ -9,13 +10,22 @@ const {
   generateAuditoriumSeatMap,
   validateAuditoriumSeat,
 } = require('../../shared/constants/auditoriumConfig');
+const User = require('../users/user.model');
+const bookingRepository = require('./booking.repository');
 const {
-  findConfirmedBookingsForEvent,
-  findConfirmedBookingByUserAndEvent,
-  createBookingWithRetry,
-} = require('./booking.repository');
-const { BOOKING_STATUS, SEAT_STATE } = require('./booking.constants');
+  BOOKING_STATUS,
+  SEAT_STATE,
+  EMAIL_STATUS,
+} = require('./booking.constants');
+const {
+  generateTicketQrCode,
+  generateSecureTicketToken,
+} = require('./ticket.service');
+const {
+  sendBookingConfirmationEmail,
+} = require('../../services/email.service');
 const AppError = require('../../core/errors/AppError');
+const logger = require('../../core/logger');
 
 /**
  * Combines an event date and start time string (HH:mm) into a Date object.
@@ -73,7 +83,8 @@ const getEventSeatMap = async (eventId) => {
   const isBookingClosed = isPastStart || event.status !== EVENT_STATUS.UPCOMING;
 
   // Retrieve confirmed bookings for event
-  const confirmedBookings = await findConfirmedBookingsForEvent(eventId);
+  const confirmedBookings =
+    await bookingRepository.findConfirmedBookingsForEvent(eventId);
   const bookedSeatSet = new Set(confirmedBookings.map((b) => b.seatId));
 
   // Generate template seat map (360 seats total)
@@ -164,7 +175,13 @@ const getEventSeatMap = async (eventId) => {
  * @param {number} [params.now] - Optional timestamp for testing time boundary.
  * @returns {Promise<Object>} Created booking confirmation data.
  */
-const bookSeat = async ({ eventId, userId, seatId, now = Date.now() }) => {
+const bookSeat = async ({
+  eventId,
+  userId,
+  user = null,
+  seatId,
+  now = Date.now(),
+}) => {
   const event = await Event.findById(eventId);
 
   if (!event) {
@@ -216,10 +233,8 @@ const bookSeat = async ({ eventId, userId, seatId, now = Date.now() }) => {
   }
 
   // Preliminary check for friendly conflict response (database index remains final authority)
-  const existingBooking = await findConfirmedBookingByUserAndEvent(
-    eventId,
-    userId
-  );
+  const existingBooking =
+    await bookingRepository.findConfirmedBookingByUserAndEvent(eventId, userId);
   if (existingBooking) {
     throw AppError.conflict(
       'You already have a confirmed booking for this event.'
@@ -227,7 +242,7 @@ const bookSeat = async ({ eventId, userId, seatId, now = Date.now() }) => {
   }
 
   // Atomically persist booking with auditorium derived exclusively from event.auditorium
-  const booking = await createBookingWithRetry({
+  const booking = await bookingRepository.createBookingWithRetry({
     eventId: event._id,
     user: userId,
     auditorium: event.auditorium, // SERVER-DERIVED
@@ -235,6 +250,114 @@ const bookSeat = async ({ eventId, userId, seatId, now = Date.now() }) => {
     seatLabel: seatValidation.label,
     status: BOOKING_STATUS.CONFIRMED,
   });
+
+  // Generate authoritative QR code (DataURL for client display & Buffer for email attachment)
+  let qrCodeDataUrl = null;
+  let qrBuffer = null;
+  try {
+    const token = booking.ticketToken || generateSecureTicketToken();
+    const qrResult = await generateTicketQrCode({
+      ticketToken: token,
+      bookingReference: booking.bookingReference,
+    });
+    qrCodeDataUrl = qrResult.dataUrl;
+    qrBuffer = qrResult.buffer;
+  } catch (qrErr) {
+    logger.error('Failed to generate ticket QR code bitmap', {
+      context: 'BookingService',
+      bookingId: booking._id,
+      bookingReference: booking.bookingReference,
+      error: qrErr.message,
+    });
+  }
+
+  // Fetch student account to send confirmation email
+  let emailDeliveryStatus = EMAIL_STATUS.PENDING;
+  let studentEmail = user?.email;
+  let studentName = user?.name;
+
+  if (!studentEmail) {
+    try {
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        const studentUser = await User.findById(userId).lean();
+        if (studentUser) {
+          studentEmail = studentUser.email;
+          studentName = studentUser.name;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (studentEmail) {
+    try {
+      const bookingObj =
+        typeof booking.toObject === 'function' ? booking.toObject() : booking;
+
+      const emailResult = await sendBookingConfirmationEmail({
+        to: studentEmail,
+        name: studentName,
+        booking: {
+          ...bookingObj,
+          auditoriumName:
+            AUDITORIUM_LABELS[event.auditorium] || event.auditorium,
+        },
+        event,
+        qrBuffer,
+      });
+
+      if (emailResult.success) {
+        emailDeliveryStatus = EMAIL_STATUS.SENT;
+        if (typeof bookingRepository.updateBookingEmailStatus === 'function') {
+          await bookingRepository
+            .updateBookingEmailStatus(booking._id, {
+              status: EMAIL_STATUS.SENT,
+              sentAt: new Date(),
+            })
+            .catch(() => {});
+        }
+      } else if (emailResult.notConfigured) {
+        emailDeliveryStatus = EMAIL_STATUS.NOT_CONFIGURED;
+        if (typeof bookingRepository.updateBookingEmailStatus === 'function') {
+          await bookingRepository
+            .updateBookingEmailStatus(booking._id, {
+              status: EMAIL_STATUS.NOT_CONFIGURED,
+            })
+            .catch(() => {});
+        }
+      } else {
+        emailDeliveryStatus = EMAIL_STATUS.FAILED;
+        if (typeof bookingRepository.updateBookingEmailStatus === 'function') {
+          await bookingRepository
+            .updateBookingEmailStatus(booking._id, {
+              status: EMAIL_STATUS.FAILED,
+              error: emailResult.error || 'Failed to dispatch email',
+            })
+            .catch(() => {});
+        }
+      }
+    } catch (emailErr) {
+      logger.error(
+        'Unexpected error during booking confirmation email dispatch',
+        {
+          context: 'BookingService',
+          bookingId: booking._id,
+          bookingReference: booking.bookingReference,
+          error: emailErr.message,
+        }
+      );
+      emailDeliveryStatus = EMAIL_STATUS.FAILED;
+      if (typeof bookingRepository.updateBookingEmailStatus === 'function') {
+        await bookingRepository
+          .updateBookingEmailStatus(booking._id, {
+            status: EMAIL_STATUS.FAILED,
+            error: emailErr.message,
+          })
+          .catch(() => {});
+      }
+    }
+  }
 
   return {
     id: booking._id,
@@ -250,6 +373,76 @@ const bookSeat = async ({ eventId, userId, seatId, now = Date.now() }) => {
     startTime: event.startTime,
     endTime: event.endTime,
     createdAt: booking.createdAt,
+    ticket: {
+      qrCode: qrCodeDataUrl,
+      issuedAt: booking.ticketIssuedAt || booking.createdAt,
+    },
+    emailDelivery: {
+      status: emailDeliveryStatus,
+    },
+  };
+};
+
+/**
+ * Retrieves the ticket and QR code for an existing confirmed booking.
+ * Strictly enforces ownership (IDOR protection) or admin access.
+ *
+ * @param {string} bookingId - Target booking identifier.
+ * @param {string} userId - Authenticated user identifier.
+ * @param {string} userRole - Authenticated user role.
+ * @returns {Promise<Object>} Ticket details and QR code DataURL.
+ */
+const getBookingTicket = async (bookingId, userId, userRole) => {
+  const booking = await bookingRepository.findBookingById(bookingId, true);
+
+  if (!booking) {
+    throw AppError.notFound('Booking not found.');
+  }
+
+  // IDOR & Authorization enforcement: Only booking owner or ADMIN can view ticket
+  const isOwner = booking.user && booking.user.toString() === String(userId);
+  const isAdmin = userRole === 'ADMIN';
+
+  if (!isOwner && !isAdmin) {
+    throw AppError.forbidden(
+      'You do not have permission to access this ticket.'
+    );
+  }
+
+  const eventQuery = Event.findById(booking.eventId);
+  const event =
+    eventQuery && typeof eventQuery.lean === 'function'
+      ? await eventQuery.lean()
+      : await eventQuery;
+
+  // Generate authoritative QR representation
+  let qrCodeDataUrl = null;
+  if (booking.ticketToken) {
+    const qrResult = await generateTicketQrCode({
+      ticketToken: booking.ticketToken,
+      bookingReference: booking.bookingReference,
+    });
+    qrCodeDataUrl = qrResult.dataUrl;
+  }
+
+  return {
+    ticket: {
+      bookingId: booking._id,
+      bookingReference: booking.bookingReference,
+      eventId: booking.eventId,
+      eventName: event ? event.name : 'Unknown Event',
+      auditorium: booking.auditorium,
+      auditoriumName:
+        AUDITORIUM_LABELS[booking.auditorium] || booking.auditorium,
+      seatId: booking.seatId,
+      seatLabel: booking.seatLabel,
+      status: booking.status,
+      eventDate: event ? event.date : null,
+      startTime: event ? event.startTime : null,
+      endTime: event ? event.endTime : null,
+      qrCode: qrCodeDataUrl,
+      issuedAt: booking.ticketIssuedAt || booking.createdAt,
+    },
   };
 };
 
@@ -257,4 +450,5 @@ module.exports = {
   getEventStartDateTime,
   getEventSeatMap,
   bookSeat,
+  getBookingTicket,
 };

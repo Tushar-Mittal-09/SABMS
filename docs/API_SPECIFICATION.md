@@ -947,7 +947,6 @@
     "seatId": "C-04"
   }
   ```
-- **Success Response (`201 Created`)**:
   ```json
   {
     "success": true,
@@ -966,12 +965,21 @@
         "eventDate": "2026-09-20T00:00:00.000Z",
         "startTime": "10:00",
         "endTime": "13:00",
-        "createdAt": "2026-09-10T17:00:00.000Z"
+        "createdAt": "2026-09-10T17:00:00.000Z",
+        "ticket": {
+          "qrCode": "data:image/png;base64,...",
+          "issuedAt": "2026-09-10T17:00:00.000Z"
+        },
+        "emailDelivery": {
+          "status": "SENT"
+        }
       }
     },
     "meta": null
   }
   ```
+- **`ticket` Field**: Contains the authoritative QR code DataURL and issuance timestamp. The raw `ticketToken` is never exposed.
+- **`emailDelivery.status` Values**: `PENDING` | `SENT` | `FAILED` | `NOT_CONFIGURED`. `SENT` is only returned when SMTP dispatch is confirmed. Booking status is independent of email outcome.
 - **Error Responses**:
   - `400 / 422 Bad Request / Unprocessable Entity`: Missing `seatId`, invalid seat format, or attempting to book faculty-reserved row A or B.
   - `401 Unauthorized`: Missing or invalid Bearer JWT.
@@ -981,3 +989,46 @@
     - Seat was already booked by another student.
     - Authenticated student already has a confirmed booking for this event.
     - Event booking window has closed (`now >= startTime`), or event is `ONGOING`/`COMPLETED`/`CANCELLED`.
+
+---
+
+### 4.5 `GET /api/v1/bookings/:bookingId/ticket` — Retrieve Booking Ticket (Step 5)
+
+- **Authentication**: `Authorization: Bearer <JWT_ACCESS_TOKEN>` (Required)
+- **Authorization**: Booking owner (`STUDENT`) or `ADMIN` role. Returns `403 Forbidden` for non-owner students (IDOR protection).
+- **Path Parameters**:
+  - `bookingId` (string, required): MongoDB ObjectId of the target booking.
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Ticket retrieved successfully",
+    "data": {
+      "ticket": {
+        "bookingId": "6aa28c819bf76dc21e54c999",
+        "bookingReference": "BK-MTVQPDVS-1CDECF",
+        "eventId": "6aa28c819bf76dc21e54c534",
+        "eventName": "AI & Machine Learning Workshop [Demo]",
+        "auditorium": "AUDITORIUM_1",
+        "auditoriumName": "Auditorium 1",
+        "seatId": "C-04",
+        "seatLabel": "Row C, Seat 4",
+        "status": "CONFIRMED",
+        "eventDate": "2026-09-20T00:00:00.000Z",
+        "startTime": "10:00",
+        "endTime": "13:00",
+        "qrCode": "data:image/png;base64,...",
+        "issuedAt": "2026-09-10T17:00:00.000Z"
+      }
+    },
+    "meta": null
+  }
+  ```
+- **Security Notes**:
+  - Raw `ticketToken` is never included in the response.
+  - QR code is regenerated from the persisted token on each request.
+  - `toJSON` transforms strip `ticketToken` from all Mongoose serializations.
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or invalid Bearer JWT.
+  - `403 Forbidden`: Authenticated user does not own the booking and is not an ADMIN.
+  - `404 Not Found`: Booking ID does not exist.

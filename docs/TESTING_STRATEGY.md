@@ -22,7 +22,7 @@
 
 | Level                                  | Scope                                                             | Framework / Tool          | Verification Approach                                                    |
 | :------------------------------------- | :---------------------------------------------------------------- | :------------------------ | :----------------------------------------------------------------------- |
-| **Backend Unit Testing**               | Domain services, helpers, cryptographic primitives, Zod schemas   | Jest                      | 27 suites, 592 unit & integration tests passing (100%)                   |
+| **Backend Unit Testing**               | Domain services, helpers, cryptographic primitives, Zod schemas   | Jest                      | 32 suites, 682 unit & integration tests passing (100%)                   |
 | **Backend Integration Testing**        | Express API endpoints, MongoDB queries, Redis state, middleware   | Jest + Supertest          | End-to-end HTTP pipeline, session lifecycle, and concurrency race suites |
 | **Frontend Production Build**          | JSX parsing, asset bundling, CSS generation, module resolution    | Vite (`vite build`)       | Clean production bundle compilation (0 errors; 1663 modules transformed) |
 | **Frontend Code Quality**              | Syntax correctness, unused variables, React hook rules            | ESLint (`eslint .`)       | Clean lint report (0 errors, 0 warnings)                                 |
@@ -151,7 +151,7 @@
 
 ### Frontend Telemetry (Node Test Runner & Vite)
 
-- **Seat Selection & Booking Suite**: 15 passed, 15 total (`seat-selection.test.mjs`)
+- **Seat Selection & Booking Suite**: 19 passed, 19 total (`seat-selection.test.mjs`)
 - **Client Linter**: 0 errors, 0 warnings (`eslint .`)
 - **Client Production Build**: Verified with Vite (`vite build` exited 0; 1686 modules transformed)
 
@@ -172,3 +172,33 @@
 - [x] `TC-BOOK-013`: Loading state renders correctly during initial fetch.
 - [x] `TC-BOOK-014`: Envelope mapping verified (zero fake/hardcoded success data).
 - [x] `TC-BOOK-015`: Responsive column sections and zero horizontal overflow verified.
+
+### Step 5 Test Cases — Backend (`server/tests/unit/booking.ticket.test.js`)
+
+- [x] `TC-TKT-001`: Secure token generation: prefix `tkt_`, exactly 64 hex characters (256-bit entropy).
+- [x] `TC-TKT-002`: Cryptographically distinct tokens (50 iterations, 100% unique).
+- [x] `TC-TKT-003`: QR payload contains only opaque token (`t`) and reference (`ref`).
+- [x] `TC-TKT-004`: QR payload strictly omits passwords, JWTs, student PII, and database internals.
+- [x] `TC-TKT-005`: QR generation produces valid PNG DataURL and Buffer.
+- [x] `TC-TKT-006`: HTML email template contains all booking details without secrets.
+- [x] `TC-TKT-007`: Plain-text email template contains structured booking details.
+- [x] `TC-TKT-008`: Email transporter success returns `{ success: true, messageId }`.
+- [x] `TC-TKT-009`: Email transporter failure returns `{ success: false }` without throwing.
+- [x] `TC-TKT-010`: Missing recipient email returns failure.
+- [x] `TC-TKT-011`: `bookSeat()` creates booking with ticket, QR code, and truthful email status `SENT`.
+- [x] `TC-TKT-012`: Booking remains `CONFIRMED` when email delivery fails (email status `FAILED`).
+- [x] `TC-TKT-013`: Unauthenticated ticket request returns 401 Unauthorized.
+- [x] `TC-TKT-014`: Non-owner student ticket request returns 403 Forbidden (IDOR protection).
+- [x] `TC-TKT-015`: Booking owner retrieves ticket with 200 OK and valid QR DataURL.
+- [x] `TC-TKT-016`: ADMIN can access any student's ticket (200 OK).
+- [x] `TC-TKT-017`: Non-existent booking returns 404 Not Found.
+- [x] `TC-TKT-018`: `ticketToken` schema field is sparse, unique, and `select: false`.
+- [x] `TC-TKT-019`: `emailStatus` defaults to `PENDING` with valid enum values.
+- [x] `TC-TKT-020`: `toJSON` transform strips `ticketToken` from serialized output.
+
+### Step 5 Test Cases — Frontend (`client/tests/seat-selection.test.mjs`)
+
+- [x] `TC-TKT-F001`: QR ticket DataURL rendered from authoritative backend response (no client-generated tokens).
+- [x] `TC-TKT-F002`: Download QR Ticket constructs valid filename (`SABMS-Ticket-<ref>.png`).
+- [x] `TC-TKT-F003`: Email delivery status feedback: `SENT` → emerald, `PENDING` → blue, `FAILED`/`NOT_CONFIGURED` → amber.
+- [x] `TC-TKT-F004`: Client does not manufacture fake QR tokens or bypass backend generation.

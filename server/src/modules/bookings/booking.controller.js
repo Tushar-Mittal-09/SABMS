@@ -29,13 +29,35 @@ const createBooking = catchAsync(async (req, res) => {
   const booking = await bookingService.bookSeat({
     eventId,
     userId,
+    user: req.user,
     seatId,
   });
 
   return res.created({ booking }, 'Seat booked successfully');
 });
 
+/**
+ * GET /api/v1/bookings/:bookingId/ticket
+ *
+ * Retrieves the ticket details and secure QR code for a confirmed booking.
+ * Enforces authenticated ownership (IDOR protection).
+ */
+const getTicket = catchAsync(async (req, res) => {
+  const { bookingId } = req.params;
+  const userId = req.user.id || req.user.sub;
+  const userRole = req.user.role;
+
+  const result = await bookingService.getBookingTicket(
+    bookingId,
+    userId,
+    userRole
+  );
+
+  return res.success(result, 'Ticket retrieved successfully');
+});
+
 module.exports = {
   getEventSeats,
   createBooking,
+  getTicket,
 };

@@ -35,6 +35,41 @@ graph TD
     AuthModule --> Redis[(Redis Ephemeral Cache & State)]
     CoreLayer --> Redis
     NotificationModule --> SMTP[SMTP / SMS Transports]
+    BookingModule --> QRGen[QR Code Generation Service]
+    BookingModule --> SMTP
+```
+
+### 1.1 Ticket Generation & Email Confirmation Flow (Step 5)
+
+```mermaid
+sequenceDiagram
+    participant S as Student Client
+    participant API as Express API
+    participant BS as BookingService
+    participant TS as TicketService
+    participant ES as EmailService
+    participant DB as MongoDB
+
+    S->>API: POST /api/v1/events/:eventId/bookings
+    API->>BS: bookSeat({ eventId, userId, seatId })
+    BS->>DB: createBookingWithRetry() (with ticketToken)
+    DB-->>BS: Booking { ticketToken, bookingReference }
+    BS->>TS: generateTicketQrCode({ ticketToken, bookingReference })
+    TS-->>BS: { dataUrl, buffer }
+    BS->>ES: sendBookingConfirmationEmail({ to, booking, event, qrBuffer })
+    ES-->>BS: { success, messageId } or { success: false }
+    BS->>DB: updateBookingEmailStatus(SENT | FAILED | NOT_CONFIGURED)
+    BS-->>API: { booking, ticket: { qrCode }, emailDelivery: { status } }
+    API-->>S: 201 Created
+
+    S->>API: GET /api/v1/bookings/:bookingId/ticket
+    API->>BS: getBookingTicket(bookingId, userId, userRole)
+    BS->>DB: findBookingById(bookingId, includeToken=true)
+    BS->>BS: IDOR ownership check
+    BS->>TS: generateTicketQrCode({ ticketToken, bookingReference })
+    TS-->>BS: { dataUrl }
+    BS-->>API: { ticket: { qrCode, bookingReference, ... } }
+    API-->>S: 200 OK
 ```
 
 ---
@@ -123,3 +158,4 @@ Student Client (React)                 SABMS Backend API                     Mon
 | :------- | :--------- | :------------------------ | :-------------------------------------------------------------------------- |
 | `v1.0.0` | 2026-08-08 | Senior Software Architect | Initial HLD Architecture Baseline                                           |
 | `v1.1.0` | 2026-09-07 | Senior Software Architect | Sprint 2 Final Acceptance Closure: Canonical Layer Separation & Auth Domain |
+| `v1.2.0` | 2026-09-11 | Senior Software Architect | Step 5: QR Ticket Generation & Email Confirmation Architecture Flow         |

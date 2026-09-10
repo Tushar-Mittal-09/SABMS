@@ -23,6 +23,14 @@ export const bookingsApi = {
    */
   bookSeat: (eventId, seatId) =>
     api.post(`/events/${eventId}/bookings`, { seatId }),
+
+  /**
+   * Retrieves the secure QR ticket details for a confirmed booking.
+   *
+   * @param {string} bookingId - Target booking identifier.
+   * @returns {Promise<Object>} API response with ticket details and QR data URL.
+   */
+  getTicket: (bookingId) => api.get(`/bookings/${bookingId}/ticket`),
 };
 
 export default bookingsApi;

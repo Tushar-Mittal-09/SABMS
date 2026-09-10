@@ -25,6 +25,15 @@ const SEAT_STATE = Object.freeze({
 
 const SEAT_STATE_VALUES = Object.freeze(Object.values(SEAT_STATE));
 
+const EMAIL_STATUS = Object.freeze({
+  PENDING: 'PENDING',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+  NOT_CONFIGURED: 'NOT_CONFIGURED',
+});
+
+const EMAIL_STATUS_VALUES = Object.freeze(Object.values(EMAIL_STATUS));
+
 const MAX_BOOKING_REFERENCE_RETRIES = 3;
 
 module.exports = {
@@ -32,5 +41,7 @@ module.exports = {
   BOOKING_STATUS_VALUES,
   SEAT_STATE,
   SEAT_STATE_VALUES,
+  EMAIL_STATUS,
+  EMAIL_STATUS_VALUES,
   MAX_BOOKING_REFERENCE_RETRIES,
 };

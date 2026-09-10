@@ -7,6 +7,8 @@ import {
   AlertCircle,
   Shield,
   Loader2,
+  Download,
+  Mail,
 } from 'lucide-react';
 import { bookingsApi } from '../services/bookings.api';
 import Loading from '../components/Loading';
@@ -161,6 +163,16 @@ export const SeatSelection = () => {
     } finally {
       setIsBooking(false);
     }
+  };
+
+  const handleDownloadTicket = () => {
+    if (!bookingSuccess?.ticket?.qrCode) return;
+    const link = document.createElement('a');
+    link.href = bookingSuccess.ticket.qrCode;
+    link.download = `SABMS-Ticket-${bookingSuccess.bookingReference || 'booking'}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const event = seatData?.event;
@@ -355,6 +367,79 @@ export const SeatSelection = () => {
                   </span>
                 </div>
               </div>
+
+              {/* Authoritative QR E-Ticket Section */}
+              {bookingSuccess.ticket?.qrCode && (
+                <div
+                  className="mb-6 flex flex-col items-center justify-center rounded-xl border border-brand-border bg-gray-50 p-5 text-center dark:border-dark-border dark:bg-dark-bg/60"
+                  id="success-ticket-section"
+                >
+                  <div className="mb-2 text-xs font-bold uppercase tracking-wider text-brand-navy dark:text-dark-blue">
+                    Official Digital Entry Ticket
+                  </div>
+                  <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-white">
+                    <img
+                      src={bookingSuccess.ticket.qrCode}
+                      alt="Booking QR Ticket"
+                      id="booking-qr-code"
+                      className="h-44 w-44 object-contain sm:h-48 sm:w-48"
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-brand-muted dark:text-dark-muted">
+                    Scan this secure QR code at the auditorium entrance.
+                  </p>
+                  <div className="mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={Download}
+                      onClick={handleDownloadTicket}
+                      id="download-ticket-btn"
+                    >
+                      Download QR Ticket
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Email Delivery Feedback */}
+              {bookingSuccess.emailDelivery?.status === 'SENT' && (
+                <div
+                  className="mb-6 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
+                  id="email-status-sent"
+                >
+                  <Mail className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span>
+                    A confirmation email with your QR ticket has been sent to
+                    your registered email address.
+                  </span>
+                </div>
+              )}
+              {bookingSuccess.emailDelivery?.status === 'PENDING' && (
+                <div
+                  className="mb-6 flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
+                  id="email-status-pending"
+                >
+                  <Mail className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                  <span>
+                    Your booking is confirmed! Confirmation email is being
+                    dispatched.
+                  </span>
+                </div>
+              )}
+              {(bookingSuccess.emailDelivery?.status === 'FAILED' ||
+                bookingSuccess.emailDelivery?.status === 'NOT_CONFIGURED') && (
+                <div
+                  className="mb-6 flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+                  id="email-status-fallback"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>
+                    Your seat is confirmed! Please download or screenshot your
+                    QR ticket above.
+                  </span>
+                </div>
+              )}
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button

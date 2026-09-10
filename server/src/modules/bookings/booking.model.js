@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const {
   BOOKING_STATUS_VALUES,
   BOOKING_STATUS,
+  EMAIL_STATUS_VALUES,
+  EMAIL_STATUS,
 } = require('./booking.constants');
 const { STUDENT_BOOKABLE_AUDITORIUM_CODES } = require('../../shared/constants');
 
@@ -78,18 +80,50 @@ const bookingSchema = new mongoose.Schema(
       uppercase: true,
       index: true,
     },
+    ticketToken: {
+      type: String,
+      unique: true,
+      sparse: true,
+      select: false,
+      trim: true,
+      index: true,
+    },
+    ticketIssuedAt: {
+      type: Date,
+      default: null,
+    },
+    emailStatus: {
+      type: String,
+      enum: {
+        values: EMAIL_STATUS_VALUES,
+        message: '{VALUE} is not a valid email status',
+      },
+      default: EMAIL_STATUS.PENDING,
+      index: true,
+    },
+    emailSentAt: {
+      type: Date,
+      default: null,
+    },
+    emailError: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   {
     timestamps: true,
     collection: 'bookings',
     toJSON: {
       transform: function (_doc, ret) {
+        delete ret.ticketToken;
         delete ret.__v;
         return ret;
       },
     },
     toObject: {
       transform: function (_doc, ret) {
+        delete ret.ticketToken;
         delete ret.__v;
         return ret;
       },

@@ -8,6 +8,7 @@ const {
 } = require('./booking.constants');
 const AppError = require('../../core/errors/AppError');
 const logger = require('../../core/logger');
+const { generateSecureTicketToken } = require('./ticket.service');
 
 /**
  * Generates a cryptographically random, collision-resistant booking reference.
@@ -68,6 +69,8 @@ const createBookingWithRetry = async (
   let attempt = 0;
   let currentReference =
     bookingData.bookingReference || generateBookingReference();
+  let currentTicketToken =
+    bookingData.ticketToken || generateSecureTicketToken();
 
   while (attempt < maxRetries) {
     attempt += 1;
@@ -75,6 +78,8 @@ const createBookingWithRetry = async (
       const booking = await Booking.create({
         ...bookingData,
         bookingReference: currentReference,
+        ticketToken: currentTicketToken,
+        ticketIssuedAt: bookingData.ticketIssuedAt || new Date(),
       });
       return booking;
     } catch (err) {
@@ -135,6 +140,23 @@ const createBookingWithRetry = async (
           continue;
         }
 
+        // 4. Ticket token collision -> Regenerate secure token and retry (NEVER log raw token)
+        if (
+          keyPattern.ticketToken ||
+          errMsg.includes('ticketToken') ||
+          errMsg.includes('unique_ticket_token')
+        ) {
+          logger.warn(
+            'Ticket token collision; retrying with new secure token',
+            {
+              attempt,
+              maxRetries,
+            }
+          );
+          currentTicketToken = generateSecureTicketToken();
+          continue;
+        }
+
         // Fallback for compound index message match
         if (
           errMsg.includes('unique_active_event_seat') ||
@@ -163,7 +185,48 @@ const createBookingWithRetry = async (
   }
 
   throw AppError.internal(
-    'Unable to generate unique booking reference. Please try again.'
+    'Unable to complete booking persistence. Please try again.'
+  );
+};
+
+/**
+ * Finds a booking by its primary ID.
+ * Optionally includes the secure ticket token for ticket generation.
+ *
+ * @param {string|mongoose.Types.ObjectId} bookingId - Target booking ID.
+ * @param {boolean} [includeToken=false] - Whether to include the ticketToken field.
+ * @returns {Promise<Object|null>} Booking document or null.
+ */
+const findBookingById = async (bookingId, includeToken = false) => {
+  const query = Booking.findById(bookingId);
+  if (includeToken) {
+    query.select('+ticketToken');
+  }
+  return query.exec();
+};
+
+/**
+ * Updates the email delivery lifecycle status of a booking.
+ *
+ * @param {string|mongoose.Types.ObjectId} bookingId - Target booking ID.
+ * @param {Object} update
+ * @param {string} update.status - Email status ('SENT', 'FAILED', 'NOT_CONFIGURED').
+ * @param {string} [update.error=null] - Error message if delivery failed.
+ * @param {Date} [update.sentAt=null] - Timestamp of successful dispatch.
+ * @returns {Promise<Object|null>} Updated booking document.
+ */
+const updateBookingEmailStatus = async (
+  bookingId,
+  { status, error = null, sentAt = null }
+) => {
+  return Booking.findByIdAndUpdate(
+    bookingId,
+    {
+      emailStatus: status,
+      emailError: error,
+      emailSentAt: sentAt,
+    },
+    { new: true }
   );
 };
 
@@ -172,4 +235,6 @@ module.exports = {
   findConfirmedBookingsForEvent,
   findConfirmedBookingByUserAndEvent,
   createBookingWithRetry,
+  findBookingById,
+  updateBookingEmailStatus,
 };

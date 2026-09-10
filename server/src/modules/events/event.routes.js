@@ -1,11 +1,15 @@
 'use strict';
 
 const express = require('express');
-const { authenticate } = require('../../core/middleware/auth.middleware');
+const {
+  authenticate,
+  authorize,
+} = require('../../core/middleware/auth.middleware');
 const {
   validateParams,
   validateQuery,
 } = require('../../core/middleware/validateRequest.middleware');
+const { USER_ROLES } = require('../../shared/constants');
 const { eventIdParamSchema, listEventsQuerySchema } = require('./event.schema');
 const eventController = require('./event.controller');
 
@@ -17,13 +21,14 @@ const router = express.Router();
  * GET /api/v1/events
  *
  * Lists student-visible events (UPCOMING, ONGOING).
- * Requires authentication.
+ * Requires student authentication and authorization.
  * Supports pagination: ?page=1&limit=12
- * Supports filters: ?status=UPCOMING&auditorium=AUDITORIUM_1
+ * Supports filters: ?auditorium=AUDITORIUM_1
  */
 router.get(
   '/',
   authenticate,
+  authorize(USER_ROLES.STUDENT),
   validateQuery(listEventsQuerySchema),
   eventController.listEvents
 );
@@ -32,12 +37,13 @@ router.get(
  * GET /api/v1/events/:eventId
  *
  * Retrieves details of a specific student-visible event.
- * Requires authentication.
+ * Requires student authentication and authorization.
  * Returns 404 for completed, cancelled, or non-existent events.
  */
 router.get(
   '/:eventId',
   authenticate,
+  authorize(USER_ROLES.STUDENT),
   validateParams(eventIdParamSchema),
   eventController.getEventById
 );

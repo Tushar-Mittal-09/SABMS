@@ -17,6 +17,50 @@ const getCookie = (name) => {
   return match ? decodeURIComponent(match[3]) : null;
 };
 
+// In-memory CSRF token cache and pending fetch promise
+let inMemoryCsrfToken = null;
+let csrfFetchPromise = null;
+
+/**
+ * Fetches and caches a fresh CSRF token from the server.
+ * Ensures single-flight request if multiple mutating calls occur simultaneously.
+ *
+ * @returns {Promise<string|null>}
+ */
+export const fetchCsrfToken = async () => {
+  const existingCookie = getCookie('XSRF-TOKEN');
+  if (existingCookie) {
+    inMemoryCsrfToken = existingCookie;
+    return existingCookie;
+  }
+  if (inMemoryCsrfToken) {
+    return inMemoryCsrfToken;
+  }
+
+  if (csrfFetchPromise) {
+    return csrfFetchPromise;
+  }
+
+  csrfFetchPromise = (async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/auth/csrf-token`, {
+        withCredentials: true,
+      });
+      const token = response.data?.data?.csrfToken;
+      if (token) {
+        inMemoryCsrfToken = token;
+      }
+      return inMemoryCsrfToken;
+    } catch {
+      return null;
+    } finally {
+      csrfFetchPromise = null;
+    }
+  })();
+
+  return csrfFetchPromise;
+};
+
 /**
  * Standard Axios instance configured for SABMS backend.
  */
@@ -47,7 +91,7 @@ const processQueue = (error, token = null) => {
 
 // ─── Request Interceptor ─────────────────────────────────────────────────────
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     // 1. Inject in-memory access token if available
     const token = useAuthStore.getState().accessToken;
     if (token && !config.headers.Authorization) {
@@ -58,7 +102,10 @@ apiClient.interceptors.request.use(
     const method = config.method ? config.method.toUpperCase() : 'GET';
     const isMutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
     if (isMutating) {
-      const csrfToken = getCookie('XSRF-TOKEN');
+      let csrfToken = getCookie('XSRF-TOKEN') || inMemoryCsrfToken;
+      if (!csrfToken) {
+        csrfToken = await fetchCsrfToken();
+      }
       if (csrfToken && !config.headers['X-XSRF-TOKEN']) {
         config.headers['X-XSRF-TOKEN'] = csrfToken;
       }
@@ -74,6 +121,14 @@ apiClient.interceptors.response.use(
   (response) => response.data,
   async (error) => {
     const originalRequest = error.config;
+
+    // Invalidate cached CSRF token if server reports a CSRF validation failure
+    if (
+      error.response?.status === 403 &&
+      /csrf/i.test(error.response?.data?.message || '')
+    ) {
+      inMemoryCsrfToken = null;
+    }
 
     // Skip retry on non-401 errors, already retried requests, or auth refresh/login itself
     const isAuthEndpoint =
@@ -103,11 +158,25 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
+        // Ensure CSRF token header is included on refresh request
+        let csrfToken = getCookie('XSRF-TOKEN') || inMemoryCsrfToken;
+        if (!csrfToken) {
+          csrfToken = await fetchCsrfToken();
+        }
+
+        const headers = {};
+        if (csrfToken) {
+          headers['X-XSRF-TOKEN'] = csrfToken;
+        }
+
         // Send HttpOnly refresh cookie to /auth/refresh
         const refreshResponse = await axios.post(
           `${API_BASE_URL}/auth/refresh`,
           {},
-          { withCredentials: true }
+          {
+            withCredentials: true,
+            headers,
+          }
         );
 
         const newAccessToken =

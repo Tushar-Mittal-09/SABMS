@@ -16,10 +16,12 @@
  */
 
 const path = require('path');
-const mongoose = require('mongoose');
+module.paths.push(path.resolve(__dirname, '../server/node_modules'));
 
 // Load env before config
 require('dotenv').config({ path: path.resolve(__dirname, '../server/.env') });
+
+const mongoose = require('mongoose');
 
 const config = require('../server/src/config/env.config');
 const {
@@ -124,32 +126,35 @@ const seedEvents = async () => {
     await connectDatabase();
     console.log('✅ Connected to MongoDB\n');
 
-    const existingCount = await Event.countDocuments();
-    if (existingCount > 0) {
-      console.log(
-        `ℹ️  ${existingCount} event(s) already exist in the database.`
-      );
-      console.log('   Skipping seed to avoid duplicate demo data.');
-      console.log(
-        '   To re-seed, manually clear the events collection first.\n'
-      );
-      return;
-    }
+    let upsertedCount = 0;
+    let modifiedCount = 0;
 
-    // Enrich each event with calculated seat data from auditorium config
-    const eventsToInsert = DEMO_EVENTS.map((event) => {
+    for (const event of DEMO_EVENTS) {
       const studentSeats = getStudentSeatsForAuditorium(event.auditorium);
-      return {
+      const eventData = {
         ...event,
         totalSeats: studentSeats,
         availableSeats: studentSeats,
       };
-    });
 
-    const inserted = await Event.insertMany(eventsToInsert);
+      const result = await Event.updateOne(
+        { name: event.name },
+        { $set: eventData },
+        { upsert: true }
+      );
 
-    console.log(`✅ Seeded ${inserted.length} demo events:\n`);
-    inserted.forEach((event, i) => {
+      if (result.upsertedCount > 0) upsertedCount++;
+      if (result.modifiedCount > 0) modifiedCount++;
+    }
+
+    const allEvents = await Event.find({
+      status: { $in: [EVENT_STATUS.UPCOMING, EVENT_STATUS.ONGOING] },
+    }).sort({ date: 1 });
+
+    console.log(
+      `✅ Seed completed: ${upsertedCount} created, ${modifiedCount} updated (${allEvents.length} total demo events active):\n`
+    );
+    allEvents.forEach((event, i) => {
       console.log(
         `   ${i + 1}. ${event.name}` +
           `\n      Auditorium: ${event.auditorium}` +

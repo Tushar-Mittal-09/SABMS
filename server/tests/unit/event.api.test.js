@@ -94,6 +94,58 @@ describe('Event API', () => {
     });
   });
 
+  // ─── Role-Based Access Control Tests ────────────────────────────────────────
+
+  describe('Role-Based Authorization', () => {
+    it('GET /api/v1/events should return 403 Forbidden for non-student roles (FACULTY)', async () => {
+      verifyAccessToken.mockReturnValue({
+        sub: '507f1f77bcf86cd799439099',
+        id: '507f1f77bcf86cd799439099',
+        role: 'FACULTY',
+        email: 'faculty@miet.ac.in',
+      });
+
+      const res = await request(app)
+        .get('/api/v1/events')
+        .set('Authorization', `Bearer ${VALID_TOKEN}`);
+
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('GET /api/v1/events should return 403 Forbidden for non-student roles (ADMIN)', async () => {
+      verifyAccessToken.mockReturnValue({
+        sub: '507f1f77bcf86cd799439099',
+        id: '507f1f77bcf86cd799439099',
+        role: 'ADMIN',
+        email: 'admin@miet.ac.in',
+      });
+
+      const res = await request(app)
+        .get('/api/v1/events')
+        .set('Authorization', `Bearer ${VALID_TOKEN}`);
+
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('GET /api/v1/events/:eventId should return 403 Forbidden for non-student roles', async () => {
+      verifyAccessToken.mockReturnValue({
+        sub: '507f1f77bcf86cd799439099',
+        id: '507f1f77bcf86cd799439099',
+        role: 'CLUB_MEMBER',
+        email: 'club@miet.ac.in',
+      });
+
+      const res = await request(app)
+        .get('/api/v1/events/507f1f77bcf86cd799439012')
+        .set('Authorization', `Bearer ${VALID_TOKEN}`);
+
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
   // ─── List Events Tests ──────────────────────────────────────────────────────
 
   describe('GET /api/v1/events', () => {
